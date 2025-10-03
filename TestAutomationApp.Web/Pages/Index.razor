@@ -1,0 +1,59 @@
+@page "/"
+@inject HttpClient Http
+
+<PageTitle>Test Automation Platform</PageTitle>
+
+<div class="container">
+    <div class="header">
+        <h1>🚀 Test Automation Platform</h1>
+        <p>Account Management & AI-Powered Test Script Generator</p>
+    </div>
+
+    <div class="card">
+        <div class="tabs">
+            <button class="tab @(activeTab == "form" ? "active" : "")" @onclick="@(() => activeTab = "form")">
+                📋 Request New Account
+            </button>
+            <button class="tab @(activeTab == "accounts" ? "active" : "")" @onclick="@(() => activeTab = "accounts")">
+                📊 View Accounts
+            </button>
+            <button class="tab @(activeTab == "analyzer" ? "active" : "")" @onclick="@(() => activeTab = "analyzer")">
+                🔍 Auto-Analyze Page
+            </button>
+            <button class="tab @(activeTab == "generator" ? "active" : "")" @onclick="@(() => activeTab = "generator")">
+                🤖 Generate Tests
+            </button>
+        </div>
+
+        @if (activeTab == "form")
+        {
+            <AccountForm />
+        }
+        else if (activeTab == "accounts")
+        {
+            <AccountList />
+        }
+        else if (activeTab == "analyzer")
+        {
+            <PageAnalyzer OnDescriptionGenerated="HandleDescriptionGenerated" />
+        }
+        else if (activeTab == "generator")
+        {
+            <TestGenerator @ref="testGenerator" />
+        }
+    </div>
+</div>
+
+@code {
+    private string activeTab = "form";
+    private TestGenerator? testGenerator;
+
+    private void HandleDescriptionGenerated(string description)
+    {
+        if (testGenerator != null)
+        {
+            testGenerator.LoadDescription(description);
+        }
+        activeTab = "generator";
+    }
+}

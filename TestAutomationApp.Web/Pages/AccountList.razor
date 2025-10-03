@@ -1,0 +1,74 @@
+@inject HttpClient Http
+
+<h2 style="margin-bottom: 1.5rem;">📊 Account List</h2>
+
+@if (accounts == null)
+{
+    <div class="loading">
+        <p>Loading accounts...</p>
+    </div>
+}
+else if (!accounts.Any())
+{
+    <div class="alert alert-info">
+        <p>No accounts found. Create your first account using the form above.</p>
+    </div>
+}
+else
+{
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                <tr>
+                    <th style="padding: 1rem; text-align: left;">Name</th>
+                    <th style="padding: 1rem; text-align: left;">Email</th>
+                    <th style="padding: 1rem; text-align: left;">Employee ID</th>
+                    <th style="padding: 1rem; text-align: left;">Organization</th>
+                    <th style="padding: 1rem; text-align: left;">Office/Bureau</th>
+                    <th style="padding: 1rem; text-align: left;">Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var acc in accounts)
+                {
+                    <tr style="border-bottom: 1px solid #dee2e6;">
+                        <td style="padding: 1rem;">
+                            @acc.Salutation @acc.FirstName @acc.MiddleInitial @acc.LastName
+                        </td>
+                        <td style="padding: 1rem;">@acc.EmailAddress</td>
+                        <td style="padding: 1rem;">@acc.EmployeeId</td>
+                        <td style="padding: 1rem;">@acc.OrganizationType</td>
+                        <td style="padding: 1rem;">@acc.OfficeBureau</td>
+                        <td style="padding: 1rem;">@acc.CreatedAt.ToLocalTime().ToString("g")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div style="margin-top: 1rem; color: #7f8c8d;">
+        <p>Total Accounts: <strong>@accounts.Count</strong></p>
+    </div>
+}
+
+@code {
+    private List<Account>? accounts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAccounts();
+    }
+
+    private async Task LoadAccounts()
+    {
+        try
+        {
+            accounts = await Http.GetFromJsonAsync<List<Account>>("api/accounts");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading accounts: {ex.Message}");
+            accounts = new List<Account>();
+        }
+    }
+}

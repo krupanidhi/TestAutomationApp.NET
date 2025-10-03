@@ -1,0 +1,243 @@
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+
+<div style="background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%); padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+    <h2 style="margin-bottom: 0.5rem;">🤖 AI-Powered Test Script Generator</h2>
+    <p style="color: #7f8c8d;">Describe any UI and generate automated test scripts instantly. Works for any web application!</p>
+</div>
+
+<div class="grid">
+    <!-- Input Section -->
+    <div>
+        <div class="form-group">
+            <label class="form-label">UI Description <span class="required">*</span></label>
+            <textarea @bind="uiDescription" class="form-textarea" id="uiDescription" rows="12"
+                      placeholder="Describe the UI you want to test. For example:&#10;&#10;A login form with:&#10;- Email input field (id: 'email')&#10;- Password input field (id: 'password')&#10;- Remember me checkbox&#10;- Login button&#10;- Forgot password link&#10;&#10;Or use the Account Form from this app as an example!"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Test Framework</label>
+            <select @bind="testFramework" class="form-select" id="framework">
+                @foreach (var fw in frameworks)
+                {
+                    <option value="@fw">@fw</option>
+                }
+            </select>
+        </div>
+
+        <button @onclick="GenerateTest" class="btn btn-primary" style="width: 100%;" disabled="@isGenerating">
+            @(isGenerating ? "🔄 Generating Test Scripts..." : "✨ Generate Test Scripts")
+        </button>
+
+        <div class="alert alert-info" style="margin-top: 1rem;">
+            <div>
+                <strong>💡 Quick Start Example:</strong>
+                <button @onclick="LoadExampleDescription" 
+                        style="display: block; margin-top: 0.5rem; background: none; border: none; color: #0c5460; text-decoration: underline; cursor: pointer;">
+                    → Use Account Form from this app
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Output Section -->
+    <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <label class="form-label" style="margin: 0;">Generated Test Script</label>
+            @if (!string.IsNullOrEmpty(generatedScript))
+            {
+                <div style="display: flex; gap: 0.5rem;">
+                    <button @onclick="CopyToClipboard" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+                        @(copied ? "✓ Copied!" : "📋 Copy")
+                    </button>
+                    <button @onclick="DownloadScript" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+                        💾 Download
+                    </button>
+                </div>
+            }
+        </div>
+        <pre class="code-block" style="height: 500px;">@(string.IsNullOrEmpty(generatedScript) ? "// Generated test script will appear here..." : generatedScript)</pre>
+    </div>
+</div>
+
+<!-- Previously Generated Scripts -->
+@if (savedScripts != null && savedScripts.Any())
+{
+    <div style="margin-top: 2rem;">
+        <h3 style="margin-bottom: 1rem;">📚 Previously Generated Scripts (@savedScripts.Count)</h3>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            @foreach (var script in savedScripts.Take(5))
+            {
+                <div @onclick="() => LoadScript(script)" 
+                     style="padding: 1rem; background: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6; cursor: pointer; transition: all 0.3s;">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div style="flex: 1;">
+                            <p style="font-weight: 600; color: #2c3e50; margin-bottom: 0.25rem;">@script.TestFramework</p>
+                            <p style="font-size: 0.875rem; color: #7f8c8d; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                @(script.UiDescription.Length > 100 ? script.UiDescription.Substring(0, 100) + "..." : script.UiDescription)
+                            </p>
+                        </div>
+                        <span style="font-size: 0.75rem; color: #95a5a6; margin-left: 1rem;">
+                            @script.CreatedAt.ToLocalTime().ToString("g")
+                        </span>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<!-- Features Info -->
+<div class="feature-box">
+    <h3 style="margin-bottom: 1rem;">✨ What Makes This Generator Special?</h3>
+    <ul class="feature-list">
+        <li><strong>Universal:</strong> Works for ANY UI - web apps, forms, dashboards, e-commerce sites</li>
+        <li><strong>Multi-Framework:</strong> Supports Selenium, Playwright, NUnit, XUnit, SpecFlow</li>
+        <li><strong>Smart Generation:</strong> Creates comprehensive test cases with validations</li>
+        <li><strong>Best Practices:</strong> Follows testing patterns like Arrange-Act-Assert</li>
+        <li><strong>Ready to Run:</strong> Generated code is immediately executable</li>
+    </ul>
+</div>
+
+@code {
+    private string uiDescription = string.Empty;
+    private string testFramework = "Selenium WebDriver (C#)";
+    private string generatedScript = string.Empty;
+    private bool isGenerating = false;
+    private bool copied = false;
+    private List<TestScript>? savedScripts;
+
+    private readonly string[] frameworks = new[]
+    {
+        "Selenium WebDriver (C#)",
+        "Playwright (C#)",
+        "XUnit + Selenium",
+        "NUnit + Selenium",
+        "SpecFlow + Selenium"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSavedScripts();
+    }
+
+    private async Task LoadSavedScripts()
+    {
+        try
+        {
+            savedScripts = await Http.GetFromJsonAsync<List<TestScript>>("api/testscripts");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading scripts: {ex.Message}");
+            savedScripts = new List<TestScript>();
+        }
+    }
+
+    private async Task GenerateTest()
+    {
+        if (string.IsNullOrWhiteSpace(uiDescription))
+        {
+            return;
+        }
+
+        isGenerating = true;
+        generatedScript = string.Empty;
+
+        try
+        {
+            var request = new GenerateTestRequest
+            {
+                UiDescription = uiDescription,
+                TestFramework = testFramework
+            };
+
+            var response = await Http.PostAsJsonAsync("api/testscripts/generate", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<GenerateTestResponse>();
+                if (result != null)
+                {
+                    generatedScript = result.Script;
+                    await LoadSavedScripts();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            generatedScript = $"// Error generating test script: {ex.Message}";
+        }
+        finally
+        {
+            isGenerating = false;
+        }
+    }
+
+    private async Task CopyToClipboard()
+    {
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", generatedScript);
+        copied = true;
+        await Task.Delay(2000);
+        copied = false;
+    }
+
+    private async Task DownloadScript()
+    {
+        var extension = testFramework switch
+        {
+            "Selenium WebDriver (C#)" => "cs",
+            "Playwright (C#)" => "cs",
+            "XUnit + Selenium" => "cs",
+            "NUnit + Selenium" => "cs",
+            "SpecFlow + Selenium" => "feature",
+            _ => "cs"
+        };
+
+        var fileName = $"GeneratedTest.{extension}";
+        var bytes = System.Text.Encoding.UTF8.GetBytes(generatedScript);
+        var base64 = Convert.ToBase64String(bytes);
+        
+        await JSRuntime.InvokeVoidAsync("downloadFile", fileName, base64);
+    }
+
+    private void LoadScript(TestScript script)
+    {
+        uiDescription = script.UiDescription;
+        testFramework = script.TestFramework;
+        generatedScript = script.GeneratedScript;
+    }
+
+    public void LoadDescription(string description)
+    {
+        uiDescription = description;
+        StateHasChanged();
+    }
+
+    private void LoadExampleDescription()
+    {
+        uiDescription = @"Account Request Form with the following fields:
+
+Employee Information:
+- Salutation dropdown (id: salutation)
+- First Name input (id: firstName, required, max 32 chars)
+- Middle Initial input (id: middleInitial, max 1 char)
+- Last Name input (id: lastName, required, max 32 chars)
+- Employee ID input (id: employeeId)
+
+Contact Address:
+- Email Address input (id: emailAddress, required, type: email)
+- Phone Number input (id: phoneNumber)
+- Fax Number input (id: faxNumber)
+
+Employee Details:
+- Organization Type radio buttons (HHS Employee, Contractor, Other)
+- Coordinator Name input (id: coordinatorName, max 64 chars)
+- Status radio buttons (Temporary, Permanent)
+- Work Location radio buttons (within US, Field Office, Other)
+- Office/Bureau dropdown (id: officeBureau, required)
+- Office Search List textarea (id: officeSearchList)
+
+Submit button with validation for required fields.";
+    }
+}

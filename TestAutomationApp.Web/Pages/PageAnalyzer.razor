@@ -1,0 +1,259 @@
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+
+<div style="background: linear-gradient(135deg, #11998e15 0%, #38ef7d15 100%); padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+    <h2 style="margin-bottom: 0.5rem;">🔍 Automated UI Analysis</h2>
+    <p style="color: #7f8c8d;">Automatically extract UI elements from web pages - No manual description needed!</p>
+</div>
+
+<!-- Analysis Method Tabs -->
+<div style="display: flex; gap: 1rem; margin-bottom: 2rem; border-bottom: 2px solid #e0e0e0; padding-bottom: 0;">
+    <button @onclick="@(() => analysisMethod = "url")" 
+            class="@(analysisMethod == "url" ? "tab active" : "tab")">
+        🌐 Analyze URL
+    </button>
+    <button @onclick="@(() => analysisMethod = "html")" 
+            class="@(analysisMethod == "html" ? "tab active" : "tab")">
+        📄 Paste HTML
+    </button>
+    <button @onclick="@(() => analysisMethod = "screenshot")" 
+            class="@(analysisMethod == "screenshot" ? "tab active" : "tab")">
+        📸 Upload Screenshot
+    </button>
+</div>
+
+<!-- URL Analysis -->
+@if (analysisMethod == "url")
+{
+    <div class="form-group">
+        <label class="form-label">Enter Web Page URL</label>
+        <input @bind="pageUrl" type="url" class="form-input" 
+               placeholder="https://your-ehbs-app.com/login" />
+        <p style="font-size: 0.875rem; color: #7f8c8d; margin-top: 0.5rem;">
+            Enter the URL of your EHBs application page (must be accessible from this server)
+        </p>
+    </div>
+}
+
+<!-- HTML Analysis -->
+@if (analysisMethod == "html")
+{
+    <div class="form-group">
+        <label class="form-label">Paste HTML Source Code</label>
+        <textarea @bind="htmlContent" class="form-textarea" rows="10"
+                  placeholder="Paste the HTML source code of your page here...&#10;&#10;Right-click on your page → View Page Source → Copy All"></textarea>
+        <p style="font-size: 0.875rem; color: #7f8c8d; margin-top: 0.5rem;">
+            💡 Tip: Right-click on your EHBs page → "View Page Source" → Copy and paste here
+        </p>
+    </div>
+}
+
+<!-- Screenshot Analysis -->
+@if (analysisMethod == "screenshot")
+{
+    <div class="form-group">
+        <label class="form-label">Upload Page Screenshot</label>
+        <InputFile OnChange="HandleFileSelected" accept="image/*" class="form-input" />
+        <p style="font-size: 0.875rem; color: #7f8c8d; margin-top: 0.5rem;">
+            📸 Take a screenshot of your EHBs page and upload it here (AI will analyze it)
+        </p>
+        @if (!string.IsNullOrEmpty(screenshotBase64))
+        {
+            <div style="margin-top: 1rem;">
+                <img src="data:image/png;base64,@screenshotBase64" style="max-width: 100%; max-height: 300px; border: 1px solid #ddd; border-radius: 4px;" />
+            </div>
+        }
+    </div>
+}
+
+<!-- Analyze Button -->
+<button @onclick="AnalyzePage" class="btn btn-primary" style="width: 100%;" disabled="@isAnalyzing">
+    @(isAnalyzing ? "🔄 Analyzing Page..." : "🔍 Analyze Page & Extract Elements")
+</button>
+
+<!-- Analysis Results -->
+@if (!string.IsNullOrEmpty(analysisResult))
+{
+    <div style="margin-top: 2rem;">
+        <h3 style="margin-bottom: 1rem;">📊 Analysis Results</h3>
+        
+        @if (analyzedElements != null && analyzedElements.Any())
+        {
+            <div class="alert alert-success" style="margin-bottom: 1rem;">
+                ✅ Found <strong>@analyzedElements.Count elements</strong> on the page!
+            </div>
+
+            <!-- Elements Summary -->
+            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                <h4 style="margin-bottom: 0.75rem;">Detected Elements:</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem;">
+                    <div>📝 Inputs: <strong>@analyzedElements.Count(e => e.Type == "input")</strong></div>
+                    <div>🔘 Buttons: <strong>@analyzedElements.Count(e => e.Type == "button")</strong></div>
+                    <div>📋 Dropdowns: <strong>@analyzedElements.Count(e => e.Type == "select")</strong></div>
+                    <div>📄 Text Areas: <strong>@analyzedElements.Count(e => e.Type == "textarea")</strong></div>
+                    <div>🔗 Links: <strong>@analyzedElements.Count(e => e.Type == "link")</strong></div>
+                </div>
+            </div>
+        }
+
+        <!-- Generated UI Description -->
+        <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <label class="form-label" style="margin: 0;">Generated UI Description</label>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button @onclick="CopyDescription" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+                        @(descriptionCopied ? "✓ Copied!" : "📋 Copy")
+                    </button>
+                    <button @onclick="UseForTestGeneration" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+                        ✨ Generate Tests
+                    </button>
+                </div>
+            </div>
+            <pre class="code-block" style="height: 400px; white-space: pre-wrap;">@analysisResult</pre>
+        </div>
+
+        <!-- Detailed Elements Table -->
+        @if (analyzedElements != null && analyzedElements.Any())
+        {
+            <details style="margin-top: 1rem;">
+                <summary style="cursor: pointer; font-weight: 600; padding: 0.5rem; background: #f8f9fa; border-radius: 4px;">
+                    📋 View Detailed Element List (@analyzedElements.Count elements)
+                </summary>
+                <div style="margin-top: 1rem; overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                        <thead style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                            <tr>
+                                <th style="padding: 0.75rem; text-align: left;">Type</th>
+                                <th style="padding: 0.75rem; text-align: left;">Label/Text</th>
+                                <th style="padding: 0.75rem; text-align: left;">ID</th>
+                                <th style="padding: 0.75rem; text-align: left;">Name</th>
+                                <th style="padding: 0.75rem; text-align: left;">Class</th>
+                                <th style="padding: 0.75rem; text-align: left;">Required</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var element in analyzedElements)
+                            {
+                                <tr style="border-bottom: 1px solid #dee2e6;">
+                                    <td style="padding: 0.75rem;">
+                                        <span style="background: #e3f2fd; padding: 0.25rem 0.5rem; border-radius: 4px; font-weight: 600;">
+                                            @element.Type
+                                        </span>
+                                    </td>
+                                    <td style="padding: 0.75rem;">@element.Label</td>
+                                    <td style="padding: 0.75rem;"><code>@element.Id</code></td>
+                                    <td style="padding: 0.75rem;"><code>@element.Name</code></td>
+                                    <td style="padding: 0.75rem; font-size: 0.75rem;">@element.ClassName</td>
+                                    <td style="padding: 0.75rem;">
+                                        @if (element.IsRequired)
+                                        {
+                                            <span style="color: #e74c3c; font-weight: 600;">✓ Required</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        }
+    </div>
+}
+
+<!-- Instructions -->
+<div class="feature-box" style="margin-top: 2rem;">
+    <h3 style="margin-bottom: 1rem;">💡 How It Works</h3>
+    <ul class="feature-list">
+        <li><strong>URL Analysis:</strong> Enter your EHBs page URL - we'll fetch and analyze it automatically</li>
+        <li><strong>HTML Analysis:</strong> View source of your page, copy HTML, paste here - instant analysis</li>
+        <li><strong>Screenshot Analysis:</strong> Upload a screenshot - AI extracts elements (requires OpenAI API key)</li>
+        <li><strong>Auto-Generate:</strong> Once analyzed, click "Generate Tests" to create automation scripts</li>
+        <li><strong>No Manual Work:</strong> All element IDs, names, and attributes extracted automatically!</li>
+    </ul>
+</div>
+
+@code {
+    private string analysisMethod = "html";
+    private string pageUrl = string.Empty;
+    private string htmlContent = string.Empty;
+    private string screenshotBase64 = string.Empty;
+    private bool isAnalyzing = false;
+    private string analysisResult = string.Empty;
+    private bool descriptionCopied = false;
+    private List<PageElement>? analyzedElements;
+
+    [Parameter]
+    public EventCallback<string> OnDescriptionGenerated { get; set; }
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file != null)
+        {
+            var buffer = new byte[file.Size];
+            await file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).ReadAsync(buffer);
+            screenshotBase64 = Convert.ToBase64String(buffer);
+        }
+    }
+
+    private async Task AnalyzePage()
+    {
+        isAnalyzing = true;
+        analysisResult = string.Empty;
+        analyzedElements = null;
+
+        try
+        {
+            var request = new AnalyzePageRequest
+            {
+                Method = analysisMethod switch
+                {
+                    "url" => AnalysisMethod.Url,
+                    "html" => AnalysisMethod.Html,
+                    "screenshot" => AnalysisMethod.Screenshot,
+                    _ => AnalysisMethod.Html
+                },
+                Url = pageUrl,
+                HtmlContent = htmlContent,
+                ScreenshotBase64 = screenshotBase64
+            };
+
+            var response = await Http.PostAsJsonAsync("api/pageanalyzer/analyze", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<AnalyzePageResponse>();
+                if (result != null)
+                {
+                    analysisResult = result.UiDescription;
+                    analyzedElements = result.Elements;
+                }
+            }
+            else
+            {
+                analysisResult = "Error analyzing page. Please check your input and try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            analysisResult = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isAnalyzing = false;
+        }
+    }
+
+    private async Task CopyDescription()
+    {
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", analysisResult);
+        descriptionCopied = true;
+        await Task.Delay(2000);
+        descriptionCopied = false;
+    }
+
+    private async Task UseForTestGeneration()
+    {
+        await OnDescriptionGenerated.InvokeAsync(analysisResult);
+    }
+}

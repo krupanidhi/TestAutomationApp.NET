@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test Automation Platform</title>
+    <base href="/" />
+    <link href="css/app.css" rel="stylesheet" />
+    <link href="TestAutomationApp.Web.styles.css" rel="stylesheet" />
+</head>
+
+<body>
+    <div id="app">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
+            <h3>Loading Test Automation Platform...</h3>
+            <p>Please wait while the application loads.</p>
+        </div>
+    </div>
+
+    <script src="_framework/blazor.webassembly.js"></script>
+    <script>
+        window.downloadFile = function (filename, base64Content) {
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = 'data:text/plain;base64,' + base64Content;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+    </script>
+</body>
+
+</html>

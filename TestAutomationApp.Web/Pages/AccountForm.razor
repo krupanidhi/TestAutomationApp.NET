@@ -1,0 +1,208 @@
+@inject HttpClient Http
+
+<EditForm Model="@account" OnValidSubmit="@HandleSubmit">
+    <DataAnnotationsValidator />
+
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        <div class="alert @(isSuccess ? "alert-success" : "alert-error") success-message">
+            @statusMessage
+        </div>
+    }
+
+    <!-- Notice -->
+    <div class="alert alert-info">
+        <strong>Notice:</strong> If you already have a user account, please update it rather than request a new account.
+        To update your account, please contact <a href="mailto:help@example.com">help@example.com</a>.
+    </div>
+
+    <!-- Employee Information -->
+    <div class="section-header">Employee Information</div>
+    <div class="grid">
+        <div class="form-group">
+            <label class="form-label">Salutation</label>
+            <InputSelect @bind-Value="account.Salutation" class="form-select" id="salutation">
+                <option value="">Select a Value</option>
+                <option value="Mr.">Mr.</option>
+                <option value="Ms.">Ms.</option>
+                <option value="Mrs.">Mrs.</option>
+                <option value="Dr.">Dr.</option>
+            </InputSelect>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">First Name <span class="required">*</span></label>
+            <InputText @bind-Value="account.FirstName" class="form-input" id="firstName" 
+                       placeholder="(max 32 characters)" maxlength="32" />
+            <ValidationMessage For="@(() => account.FirstName)" />
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Middle Initial</label>
+            <InputText @bind-Value="account.MiddleInitial" class="form-input" id="middleInitial" 
+                       placeholder="(max 1 character)" maxlength="1" />
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Last Name <span class="required">*</span></label>
+            <InputText @bind-Value="account.LastName" class="form-input" id="lastName" 
+                       placeholder="(max 32 characters)" maxlength="32" />
+            <ValidationMessage For="@(() => account.LastName)" />
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Employee ID (HHSID)</label>
+            <InputText @bind-Value="account.EmployeeId" class="form-input" id="employeeId" />
+        </div>
+    </div>
+
+    <!-- Contact Address -->
+    <div class="section-header">Contact Address</div>
+    <div class="grid">
+        <div class="form-group">
+            <label class="form-label">Email Address <span class="required">*</span></label>
+            <InputText @bind-Value="account.EmailAddress" class="form-input" id="emailAddress" type="email" />
+            <ValidationMessage For="@(() => account.EmailAddress)" />
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Phone Number</label>
+            <InputText @bind-Value="account.PhoneNumber" class="form-input" id="phoneNumber" 
+                       placeholder="Ext." />
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Fax Number</label>
+            <InputText @bind-Value="account.FaxNumber" class="form-input" id="faxNumber" />
+        </div>
+    </div>
+
+    <!-- Employee Details -->
+    <div class="section-header">Employee Details</div>
+    <div class="form-group">
+        <label class="form-label">Organization Type</label>
+        <div class="radio-group">
+            <label class="radio-label">
+                <InputRadio Name="orgType" @bind-Value="account.OrganizationType" id="orgType-hhs" />
+                HHS Employee
+            </label>
+            <label class="radio-label">
+                <InputRadio Name="orgType" @bind-Value="account.OrganizationType" id="orgType-contractor" />
+                Contractor
+            </label>
+            <label class="radio-label">
+                <InputRadio Name="orgType" @bind-Value="account.OrganizationType" id="orgType-other" />
+                Other
+            </label>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">If Contractor or Other, Security Coordinator Name</label>
+        <InputText @bind-Value="account.CoordinatorName" class="form-input" id="coordinatorName" 
+                   placeholder="(max. 64 characters)" maxlength="64" />
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">Status</label>
+        <div class="radio-group">
+            <label class="radio-label">
+                <InputRadio Name="status" @bind-Value="account.Status" id="status-temporary" />
+                Temporary
+            </label>
+            <label class="radio-label">
+                <InputRadio Name="status" @bind-Value="account.Status" id="status-permanent" />
+                Permanent
+            </label>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">Work Location</label>
+        <div class="radio-group">
+            <label class="radio-label">
+                <InputRadio Name="workLocation" @bind-Value="account.WorkLocation" id="workLocation-withUS" />
+                within US
+            </label>
+            <label class="radio-label">
+                <InputRadio Name="workLocation" @bind-Value="account.WorkLocation" id="workLocation-field" />
+                Field Office
+            </label>
+            <label class="radio-label">
+                <InputRadio Name="workLocation" @bind-Value="account.WorkLocation" id="workLocation-other" />
+                Other
+            </label>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">Office/Bureau <span class="required">*</span></label>
+        <InputSelect @bind-Value="account.OfficeBureau" class="form-select" id="officeBureau">
+            <option value="">Select One</option>
+            <option value="Office of the Secretary">Office of the Secretary</option>
+            <option value="Administration for Children and Families">Administration for Children and Families</option>
+            <option value="Centers for Medicare & Medicaid Services">Centers for Medicare & Medicaid Services</option>
+            <option value="Other">Other</option>
+        </InputSelect>
+        <ValidationMessage For="@(() => account.OfficeBureau)" />
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">If Other, Security List</label>
+        <InputTextArea @bind-Value="account.OfficeSearchList" class="form-textarea" id="officeSearchList" 
+                       rows="4" placeholder="(Selected list of applications)" />
+    </div>
+
+    <!-- Submit Buttons -->
+    <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 2rem;">
+        <button type="button" @onclick="ClearForm" class="btn btn-secondary">Clear</button>
+        <button type="submit" class="btn btn-primary" disabled="@isSubmitting">
+            @(isSubmitting ? "Saving..." : "💾 Save and Continue")
+        </button>
+    </div>
+</EditForm>
+
+@code {
+    private Account account = new();
+    private bool isSubmitting = false;
+    private string statusMessage = string.Empty;
+    private bool isSuccess = false;
+
+    private async Task HandleSubmit()
+    {
+        isSubmitting = true;
+        statusMessage = string.Empty;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/accounts", account);
+
+            if (response.IsSuccessStatusCode)
+            {
+                statusMessage = "Account created successfully!";
+                isSuccess = true;
+                account = new Account();
+            }
+            else
+            {
+                statusMessage = "Failed to create account. Please try again.";
+                isSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Error: {ex.Message}";
+            isSuccess = false;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private void ClearForm()
+    {
+        account = new Account();
+        statusMessage = string.Empty;
+    }
+}
