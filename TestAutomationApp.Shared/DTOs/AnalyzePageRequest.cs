@@ -8,6 +8,10 @@ public class AnalyzePageRequest
     public string? HtmlContent { get; set; }
     public string? ScreenshotBase64 { get; set; }
     public AnalysisMethod Method { get; set; } = AnalysisMethod.Html;
+    
+    // Authentication fields (only used when Method is Url and authentication is required)
+    public string? Username { get; set; }
+    public string? Password { get; set; }
 }
 
 public class AnalyzePageResponse
