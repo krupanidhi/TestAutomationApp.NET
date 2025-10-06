@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TestAutomationApp.API.Data;
+using TestAutomationApp.API.Models;
 using TestAutomationApp.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,7 +18,11 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // Register services
 builder.Services.AddScoped<ITestGeneratorService, TestGeneratorService>();
 builder.Services.AddScoped<IPageAnalyzerService, PageAnalyzerService>();
+builder.Services.AddSingleton<BrowserAutomationService>();
 builder.Services.AddHttpClient();
+
+// Configure HRSA Settings
+builder.Services.Configure<HrsaSettings>(builder.Configuration.GetSection("HrsaCredentials"));
 
 // Configure CORS
 builder.Services.AddCors(options =>

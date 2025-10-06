@@ -25,8 +25,18 @@ public class PageAnalyzerController : ControllerBase
         try
         {
             _logger.LogInformation("Analyzing page using method: {Method}", request.Method);
-            var result = await _pageAnalyzer.AnalyzePageAsync(request);
-            return Ok(result);
+            
+            // For URL method, use the version that supports authentication
+            if (request.Method == AnalysisMethod.Url && !string.IsNullOrEmpty(request.Username) && !string.IsNullOrEmpty(request.Password))
+            {
+                _logger.LogInformation("Using authenticated request for URL: {Url}", request.Url);
+                var result = await _pageAnalyzer.AnalyzeUrlAsync(request.Url!, request.Username, request.Password);
+                return Ok(result);
+            }
+            
+            // For all other cases, use the standard method
+            var standardResult = await _pageAnalyzer.AnalyzePageAsync(request);
+            return Ok(standardResult);
         }
         catch (Exception ex)
         {

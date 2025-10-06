@@ -2,25 +2,32 @@ using System.Text;
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using Azure.AI.OpenAI;
+using Microsoft.Extensions.Options;
+using TestAutomationApp.API.Models;
 using TestAutomationApp.Shared.DTOs;
-
 namespace TestAutomationApp.API.Services;
 
 public class PageAnalyzerService : IPageAnalyzerService
 {
     private readonly IConfiguration _configuration;
-    private readonly OpenAIClient? _openAIClient;
     private readonly ILogger<PageAnalyzerService> _logger;
     private readonly HttpClient _httpClient;
+    private readonly OpenAIClient? _openAIClient;
+    private readonly BrowserAutomationService _browserAutomation;
+    private readonly HrsaSettings _hrsaSettings;
 
     public PageAnalyzerService(
         IConfiguration configuration, 
         ILogger<PageAnalyzerService> logger,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        BrowserAutomationService browserAutomation,
+        IOptions<HrsaSettings> hrsaSettings)
     {
         _configuration = configuration;
         _logger = logger;
         _httpClient = httpClientFactory.CreateClient();
+        _browserAutomation = browserAutomation;
+        _hrsaSettings = hrsaSettings.Value;
 
         var apiKey = _configuration["OpenAI:ApiKey"];
         if (!string.IsNullOrEmpty(apiKey))
@@ -54,12 +61,18 @@ public class PageAnalyzerService : IPageAnalyzerService
             var doc = new HtmlDocument();
             doc.LoadHtml(html);
 
-            // Extract page title
+            // Extract page title - try multiple methods
             var titleNode = doc.DocumentNode.SelectSingleNode("//title");
-            response.PageTitle = titleNode?.InnerText?.Trim() ?? "Untitled Page";
+            response.PageTitle = titleNode?.InnerText?.Trim() ?? 
+                               doc.DocumentNode.SelectSingleNode("//meta[@property='og:title']")?.GetAttributeValue("content", null)?.Trim() ??
+                               doc.DocumentNode.SelectSingleNode("//h1")?.InnerText?.Trim() ??
+                               "Untitled Page";
+
+            _logger.LogInformation("Extracted page title: {0}", response.PageTitle);
 
             // Extract all interactive elements
             response.Elements = ExtractElements(doc);
+            _logger.LogInformation("Extracted {0} elements", response.Elements.Count);
 
             // Generate UI description
             response.UiDescription = GenerateUiDescription(response.PageTitle, response.Elements);
@@ -127,7 +140,7 @@ Then provide a comprehensive UI description suitable for generating automated te
         }
     }
 
-    public async Task<AnalyzePageResponse> AnalyzeUrlAsync(string url)
+    public async Task<AnalyzePageResponse> AnalyzeUrlAsync(string url, string? username = null, string? password = null)
     {
         if (string.IsNullOrWhiteSpace(url))
         {
@@ -136,41 +149,45 @@ Then provide a comprehensive UI description suitable for generating automated te
 
         try
         {
-            // Configure HTTP client with browser-like headers
-            var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-            request.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
-            request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
-            request.Headers.Add("Accept-Encoding", "gzip, deflate");
+            _logger.LogInformation("Starting browser automation for URL: {Url}", url);
             
-            var httpResponse = await _httpClient.SendAsync(request);
-            httpResponse.EnsureSuccessStatusCode();
+            // Use configured credentials if none provided
+            var effectiveUsername = username ?? _hrsaSettings.Username;
+            var effectivePassword = password ?? _hrsaSettings.Password;
             
-            var html = await httpResponse.Content.ReadAsStringAsync();
-            
-            // Check if we got actual content
-            if (string.IsNullOrWhiteSpace(html) || html.Length < 100)
+            if (string.IsNullOrEmpty(effectiveUsername) || string.IsNullOrEmpty(effectivePassword))
             {
+                _logger.LogWarning("No HRSA credentials provided in request or appsettings.json");
                 return new AnalyzePageResponse 
                 { 
-                    Message = "URL returned empty or minimal content. The page may require authentication or cookies. Try 'Paste HTML' method instead." 
+                    Message = "HRSA credentials are required. Please provide them in the request or configure them in appsettings.json" 
                 };
             }
             
-            var response = await AnalyzeHtmlAsync(html);
+            // Use browser automation for better handling of JavaScript and authentication
+            var result = await _browserAutomation.GetPageContentAsync(url, effectiveUsername, effectivePassword);
             
-            // Add warning if few elements found
-            if (response.Elements.Count < 3)
+            if (!result.Success)
             {
-                response.Message = $"Successfully analyzed URL: {url} - Warning: Only {response.Elements.Count} elements found. " +
-                                 "The page may use JavaScript to render content. For better results, use 'Paste HTML' method after the page loads in your browser.";
+                return new AnalyzePageResponse { Message = $"Error: {result.Message}" };
+            }
+            
+            // Analyze the retrieved HTML
+            var analysisResponse = await AnalyzeHtmlAsync(result.Content);
+            analysisResponse.PageTitle = result.Title;
+            
+            // Set appropriate message based on elements found
+            if (analysisResponse.Elements.Count < 3)
+            {
+                analysisResponse.Message = $"Successfully analyzed URL (browser): {url} - Warning: Only {analysisResponse.Elements.Count} elements found. " +
+                                       "The page may use client-side rendering or require additional interaction.";
             }
             else
             {
-                response.Message = $"Successfully analyzed URL: {url} - Found {response.Elements.Count} elements";
+                analysisResponse.Message = $"Successfully analyzed URL (browser): {url} - Found {analysisResponse.Elements.Count} elements";
             }
             
-            return response;
+            return analysisResponse;
         }
         catch (HttpRequestException ex)
         {
