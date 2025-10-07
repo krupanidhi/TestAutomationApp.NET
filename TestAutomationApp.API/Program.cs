@@ -19,6 +19,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddScoped<ITestGeneratorService, TestGeneratorService>();
 builder.Services.AddScoped<IPageAnalyzerService, PageAnalyzerService>();
 builder.Services.AddSingleton<BrowserAutomationService>();
+builder.Services.AddScoped<IPlaywrightExecutorService, PlaywrightExecutorService>();
 builder.Services.AddHttpClient();
 
 // Configure HRSA Settings

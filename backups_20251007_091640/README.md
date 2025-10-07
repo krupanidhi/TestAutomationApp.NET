@@ -215,7 +215,6 @@ builder.Services.AddScoped(sp => new HttpClient
 | **XUnit + Selenium** | C# | XUnit testing framework with Selenium |
 | **NUnit + Selenium** | C# | NUnit testing framework with Selenium |
 | **SpecFlow + Selenium** | C# (BDD) | Behavior-Driven Development with Gherkin |
-| **JSON Test Data** | JSON | Structured test data with positive/negative/boundary cases |
 
 ## 🌟 Key Features of Generated Tests
 

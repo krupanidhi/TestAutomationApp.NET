@@ -113,9 +113,8 @@
         "Playwright (C#)",
         "XUnit + Selenium",
         "NUnit + Selenium",
-        "SpecFlow + Selenium",
-        "JSON Test Data"
-    };
+        "SpecFlow + Selenium"
+    ,"JSON Test Data"`n    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -191,9 +190,7 @@
             "Playwright (C#)" => "cs",
             "XUnit + Selenium" => "cs",
             "NUnit + Selenium" => "cs",
-            "SpecFlow + Selenium" => "feature",
-            "JSON Test Data" => "json",
-            _ => "cs"
+            "SpecFlow + Selenium" => "feature",`n            "JSON Test Data" => "json",`n            _ => "cs"
         };
 
         var fileName = $"GeneratedTest.{extension}";

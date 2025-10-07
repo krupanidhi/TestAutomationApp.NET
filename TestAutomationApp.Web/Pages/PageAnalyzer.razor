@@ -112,42 +112,100 @@
             <pre class="code-block" style="height: 400px; white-space: pre-wrap;">@analysisResult</pre>
         </div>
 
-        <!-- Detailed Elements Table -->
+        <!-- Interactive Element Selection -->
         @if (analyzedElements != null && analyzedElements.Any())
         {
-            <details style="margin-top: 1rem;">
-                <summary style="cursor: pointer; font-weight: 600; padding: 0.5rem; background: #f8f9fa; border-radius: 4px;">
-                    📋 View Detailed Element List (@analyzedElements.Count elements)
-                </summary>
-                <div style="margin-top: 1rem; overflow-x: auto;">
+            <div style="margin-top: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3>🎯 Select Elements for Test Generation</h3>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button @onclick="SelectAll" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+                            ✓ Select All
+                        </button>
+                        <button @onclick="ClearSelection" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+                            ✗ Clear All
+                        </button>
+                        <button @onclick="GeneratePlaywrightJson" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.875rem;" disabled="@(!selectedElements.Any())">
+                            🚀 Generate Playwright JSON (@selectedElements.Count selected)
+                        </button>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 1rem;">
+                    <input @bind="testName" type="text" class="form-input" placeholder="Enter test name (e.g., Login Flow)" style="max-width: 500px;" />
+                </div>
+
+                <div style="overflow-x: auto;">
                     <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
                         <thead style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
                             <tr>
-                                <th style="padding: 0.75rem; text-align: left;">Type</th>
-                                <th style="padding: 0.75rem; text-align: left;">Label/Text</th>
-                                <th style="padding: 0.75rem; text-align: left;">ID</th>
-                                <th style="padding: 0.75rem; text-align: left;">Name</th>
-                                <th style="padding: 0.75rem; text-align: left;">Class</th>
-                                <th style="padding: 0.75rem; text-align: left;">Required</th>
+                                <th style="padding: 0.75rem; text-align: center; width: 50px;">Select</th>
+                                <th style="padding: 0.75rem; text-align: left;">Element</th>
+                                <th style="padding: 0.75rem; text-align: left;">Selector</th>
+                                <th style="padding: 0.75rem; text-align: left; width: 150px;">Action</th>
+                                <th style="padding: 0.75rem; text-align: left; width: 200px;">Description</th>
+                                <th style="padding: 0.75rem; text-align: center; width: 80px;">Order</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach (var element in analyzedElements)
                             {
-                                <tr style="border-bottom: 1px solid #dee2e6;">
-                                    <td style="padding: 0.75rem;">
-                                        <span style="background: #e3f2fd; padding: 0.25rem 0.5rem; border-radius: 4px; font-weight: 600;">
-                                            @element.Type
-                                        </span>
+                                var isSelected = selectedElements.Any(e => e.Element == element);
+                                var selectedElement = selectedElements.FirstOrDefault(e => e.Element == element);
+
+                                <tr style="border-bottom: 1px solid #dee2e6; background: @(isSelected ? "#e3f2fd" : "white");">
+                                    <td style="padding: 0.75rem; text-align: center;">
+                                        <input type="checkbox"
+                                               checked="@isSelected"
+                                               @onchange="@(e => ToggleElement(element, (bool)e.Value!))"
+                                               style="width: 18px; height: 18px; cursor: pointer;" />
                                     </td>
-                                    <td style="padding: 0.75rem;">@element.Label</td>
-                                    <td style="padding: 0.75rem;"><code>@element.Id</code></td>
-                                    <td style="padding: 0.75rem;"><code>@element.Name</code></td>
-                                    <td style="padding: 0.75rem; font-size: 0.75rem;">@element.ClassName</td>
                                     <td style="padding: 0.75rem;">
-                                        @if (element.IsRequired)
+                                        <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                                            <span style="background: #e3f2fd; padding: 0.25rem 0.5rem; border-radius: 4px; font-weight: 600; display: inline-block; width: fit-content;">
+                                                @element.Type @(element.InputType != null ? $"[{element.InputType}]" : "")
+                                            </span>
+                                            <span style="color: #555;">@element.Label</span>
+                                        </div>
+                                    </td>
+                                    <td style="padding: 0.75rem;">
+                                        <code style="font-size: 0.75rem; background: #f5f5f5; padding: 0.25rem; border-radius: 3px; display: block; word-break: break-all;">
+                                            @GetBestSelector(element)
+                                        </code>
+                                    </td>
+                                    <td style="padding: 0.75rem;">
+                                        @if (isSelected && selectedElement != null)
                                         {
-                                            <span style="color: #e74c3c; font-weight: 600;">✓ Required</span>
+                                            <select @bind="selectedElement.ActionType" class="form-select" style="font-size: 0.875rem; padding: 0.5rem;">
+                                                <option value="fill">📝 Fill/Type</option>
+                                                <option value="click">👆 Click</option>
+                                                <option value="selectOption">📋 Select</option>
+                                                <option value="check">☑️ Check</option>
+                                                <option value="uncheck">☐ Uncheck</option>
+                                                <option value="assertVisible">✓ Verify Visible</option>
+                                                <option value="waitForSelector">⏳ Wait</option>
+                                                <option value="hover">👋 Hover</option>
+                                            </select>
+                                        }
+                                    </td>
+                                    <td style="padding: 0.75rem;">
+                                        @if (isSelected && selectedElement != null)
+                                        {
+                                            <input @bind="selectedElement.ActionDescription"
+                                                   type="text"
+                                                   class="form-input"
+                                                   placeholder="e.g., Enter Username"
+                                                   style="font-size: 0.875rem; padding: 0.5rem;" />
+                                        }
+                                    </td>
+                                    <td style="padding: 0.75rem; text-align: center;">
+                                        @if (isSelected && selectedElement != null)
+                                        {
+                                            <input @bind="selectedElement.Order"
+                                                   type="number"
+                                                   class="form-input"
+                                                   min="1"
+                                                   style="width: 60px; font-size: 0.875rem; padding: 0.5rem; text-align: center;" />
                                         }
                                     </td>
                                 </tr>
@@ -155,8 +213,202 @@
                         </tbody>
                     </table>
                 </div>
-            </details>
+            </div>
         }
+
+        <!-- Generated Playwright JSON -->
+        @if (!string.IsNullOrEmpty(generatedJson))
+        {
+            <div style="margin-top: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <h3>🎭 Generated Playwright JSON</h3>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button @onclick="ToggleJsonEdit" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+                            @(isJsonEditable ? "👁️ View Mode" : "✏️ Edit Mode")
+                        </button>
+                        <button @onclick="FormatJson" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+                            🔧 Format JSON
+                        </button>
+                        <button @onclick="CopyJson" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+                            @(jsonCopied ? "✓ Copied!" : "📋 Copy JSON")
+                        </button>
+                        <button @onclick="DownloadJson" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+                            💾 Download
+                        </button>
+                    </div>
+                </div>
+
+                @if (isJsonEditable)
+                {
+                    <div class="form-group">
+                        <textarea @bind="generatedJson"
+                                  class="form-textarea"
+                                  rows="25"
+                                  style="font-family: 'Courier New', monospace; font-size: 0.875rem; white-space: pre;"
+                                  placeholder="Edit your JSON here..."></textarea>
+                        <p style="font-size: 0.875rem; color: #7f8c8d; margin-top: 0.5rem;">
+                            💡 Edit the JSON directly. Changes will be reflected when you execute the test.
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    <pre class="code-block" style="height: 500px;">@generatedJson</pre>
+                }
+            </div>
+        }
+        <!-- Execution Controls -->
+@if (!string.IsNullOrEmpty(generatedJson))
+{
+            <div style="margin-top: 1rem; background: #f8f9fa; padding: 1.5rem; border-radius: 8px;">
+                <h4 style="margin-bottom: 1rem;">🎭 Test Execution Options</h4>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" @bind="executeHeadless" style="cursor: pointer;" />
+                        <span>Run Headless (no browser window)</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" @bind="captureScreenshots" style="cursor: pointer;" />
+                        <span>Capture Screenshots</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" @bind="captureVideo" style="cursor: pointer;" />
+                        <span>Record Video</span>
+                    </label>
+                </div>
+
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button @onclick="ValidateJson" class="btn btn-secondary" style="flex: 1; min-width: 200px;">
+                        ✓ Validate JSON
+                    </button>
+                    <button @onclick="ExecuteTest" class="btn btn-primary" disabled="@isExecuting" style="flex: 2; min-width: 200px;">
+                        @(isExecuting ? "🔄 Executing Test..." : "▶️ Run Test with Playwright")
+                    </button>
+                    <button @onclick="ShowAppendPage" class="btn btn-secondary" style="flex: 1; min-width: 200px;">
+                        ➕ Append Page
+                    </button>
+                    <button @onclick="SaveTestFlow" class="btn btn-secondary" style="flex: 1; min-width: 150px;">
+                        💾 Save Flow
+                    </button>
+                </div>
+                @if (!string.IsNullOrEmpty(validationMessage))
+                {
+                    <div style="margin-top: 1rem; padding: 1rem; background: @(isJsonValid ? "#d4edda" : "#f8d7da");
+                                    color: @(isJsonValid ? "#155724" : "#721c24"); border-radius: 4px;">
+                        @(isJsonValid ? "✅" : "❌") @validationMessage
+                    </div>
+                }
+    </div>
+
+    <!-- Execution Results -->
+    @if (executionResult != null)
+    {
+        <div style="margin-top: 2rem;">
+            <h3 style="margin-bottom: 1rem;">
+                @(executionResult.Success ? "✅" : "❌") Test Execution Results
+            </h3>
+            
+            <div style="background: @(executionResult.Success ? "#d4edda" : "#f8d7da"); 
+                        color: @(executionResult.Success ? "#155724" : "#721c24");
+                        padding: 1rem; border-radius: 8px; margin-bottom: 1rem; font-weight: 600;">
+                @executionResult.Message
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+                <strong>Duration:</strong> @executionResult.DurationMs ms | 
+                <strong>Executed:</strong> @executionResult.ExecutedAt.ToString("g")
+            </div>
+
+            <!-- Step Results -->
+            <details open>
+                <summary style="cursor: pointer; font-weight: 600; padding: 0.5rem; background: #f8f9fa; border-radius: 4px; margin-bottom: 1rem;">
+                    📋 Step-by-Step Results (@executionResult.StepResults.Count steps)
+                </summary>
+                
+                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    @foreach (var stepResult in executionResult.StepResults)
+                    {
+                        <div style="border: 1px solid #dee2e6; border-radius: 8px; padding: 1rem; background: white;">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                                <div>
+                                    <span style="background: @(stepResult.Success ? "#28a745" : "#dc3545"); 
+                                                 color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-right: 0.5rem;">
+                                        Step @stepResult.Order
+                                    </span>
+                                    <strong>@stepResult.Description</strong>
+                                </div>
+                                <span style="color: #6c757d; font-size: 0.875rem;">@stepResult.DurationMs ms</span>
+                            </div>
+                            
+                            @if (!string.IsNullOrEmpty(stepResult.Error))
+                            {
+                                <div style="background: #f8d7da; color: #721c24; padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem;">
+                                    ❌ Error: @stepResult.Error
+                                </div>
+                            }
+                            
+                            @if (!string.IsNullOrEmpty(stepResult.Screenshot))
+                            {
+                                <div style="margin-top: 0.5rem;">
+                                    <a href="@stepResult.Screenshot" target="_blank" style="color: #007bff; text-decoration: none;">
+                                        📸 View Screenshot
+                                    </a>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </details>
+
+            <!-- Screenshots Gallery -->
+            @if (executionResult.Screenshots.Any())
+            {
+                <details style="margin-top: 1rem;">
+                    <summary style="cursor: pointer; font-weight: 600; padding: 0.5rem; background: #f8f9fa; border-radius: 4px;">
+                        📸 Screenshots (@executionResult.Screenshots.Count)
+                    </summary>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; margin-top: 1rem;">
+                        @foreach (var screenshot in executionResult.Screenshots)
+                        {
+                            <a href="@screenshot" target="_blank">
+                                <img src="@screenshot" style="width: 100%; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;" />
+                            </a>
+                        }
+                    </div>
+                </details>
+            }
+        </div>
+    }
+}
+
+<!-- Append Page Modal -->
+@if (showAppendModal)
+{
+    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 2rem; border-radius: 8px; max-width: 600px; width: 90%;">
+            <h3 style="margin-bottom: 1rem;">➕ Append New Page to Flow</h3>
+            
+            <p style="color: #6c757d; margin-bottom: 1.5rem;">
+                Add another page to create a multi-step test flow (e.g., Login → Dashboard → Report)
+            </p>
+            
+            <div class="form-group">
+                <label class="form-label">Page Name</label>
+                <input @bind="newPageName" type="text" class="form-input" placeholder="e.g., Dashboard Page" />
+            </div>
+            
+            <div class="alert alert-info">
+                💡 After clicking "Continue", paste the HTML of the next page and select elements to add to this flow.
+            </div>
+            
+            <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
+                <button @onclick="CloseAppendModal" class="btn btn-secondary" style="flex: 1;">Cancel</button>
+                <button @onclick="ContinueAppendPage" class="btn btn-primary" style="flex: 1;">Continue to Analysis</button>
+            </div>
+        </div>
+    </div>
+}
     </div>
 }
 
@@ -181,7 +433,357 @@
     private string analysisResult = string.Empty;
     private bool descriptionCopied = false;
     private List<PageElement>? analyzedElements;
+    private List<SelectedElement> selectedElements = new();
+    private string testName = "Test Case";
+    private string generatedJson = string.Empty;
+    private bool jsonCopied = false;
+    private bool executeHeadless = false;
+    private bool captureScreenshots = true;
+    private bool captureVideo = false;
+    private bool isExecuting = false;
+    private ExecuteTestResponse? executionResult;
+    private bool showAppendModal = false;
+    private string newPageName = "";
+    private List<string> flowPages = new();
+    private bool isJsonEditable = false;
+    private bool isJsonValid = false;
+    private string validationMessage = string.Empty;
 
+    private void ToggleJsonEdit()
+    {
+        isJsonEditable = !isJsonEditable;
+    }
+
+    private void FormatJson()
+    {
+        try
+        {
+            var jsonDoc = System.Text.Json.JsonDocument.Parse(generatedJson);
+            generatedJson = System.Text.Json.JsonSerializer.Serialize(jsonDoc, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+            });
+            validationMessage = "JSON formatted successfully!";
+            isJsonValid = true;
+        }
+        catch (Exception ex)
+        {
+            validationMessage = $"Invalid JSON: {ex.Message}";
+            isJsonValid = false;
+        }
+    }
+
+    private void ValidateJson()
+    {
+        try
+        {
+            var jsonDoc = System.Text.Json.JsonDocument.Parse(generatedJson);
+
+            // Check for required structure
+            if (!jsonDoc.RootElement.TryGetProperty("testCases", out var testCases))
+            {
+                validationMessage = "JSON must contain 'testCases' array";
+                isJsonValid = false;
+                return;
+            }
+
+            if (testCases.GetArrayLength() == 0)
+            {
+                validationMessage = "testCases array is empty";
+                isJsonValid = false;
+                return;
+            }
+
+            var firstTestCase = testCases[0];
+            if (!firstTestCase.TryGetProperty("steps", out var steps))
+            {
+                validationMessage = "Test case must contain 'steps' array";
+                isJsonValid = false;
+                return;
+            }
+
+            validationMessage = $"JSON is valid! Found {testCases.GetArrayLength()} test case(s) with {steps.GetArrayLength()} step(s)";
+            isJsonValid = true;
+        }
+        catch (Exception ex)
+        {
+            validationMessage = $"Invalid JSON: {ex.Message}";
+            isJsonValid = false;
+        }
+    }
+    private async Task ExecuteTest()
+    {
+        isExecuting = true;
+        executionResult = null;
+
+        try
+        {
+            var request = new ExecuteTestRequest
+            {
+                JsonScript = generatedJson,
+                Headless = executeHeadless,
+                CaptureScreenshots = captureScreenshots,
+                CaptureVideo = captureVideo
+            };
+
+            var response = await Http.PostAsJsonAsync("api/testexecution/execute", request);
+            if (response.IsSuccessStatusCode)
+            {
+                executionResult = await response.Content.ReadFromJsonAsync<ExecuteTestResponse>();
+            }
+        }
+        catch (Exception ex)
+        {
+            executionResult = new ExecuteTestResponse
+            {
+                Success = false,
+                Message = $"Error: {ex.Message}"
+            };
+        }
+        finally
+        {
+            isExecuting = false;
+        }
+    }
+
+    private void ShowAppendPage()
+    {
+        showAppendModal = true;
+    }
+
+    private void CloseAppendModal()
+    {
+        showAppendModal = false;
+        newPageName = "";
+    }
+
+    private void ContinueAppendPage()
+    {
+        flowPages.Add(newPageName);
+        showAppendModal = false;
+
+        // Clear current analysis to allow new page
+        htmlContent = "";
+        analyzedElements = null;
+        analysisResult = "";
+        selectedElements.Clear();
+
+        // User will paste new HTML and analyze, then selections will be appended to existing JSON
+    }
+
+    private async Task SaveTestFlow()
+    {
+        // TODO: Implement save flow logic
+        await JSRuntime.InvokeVoidAsync("alert", "Test flow saved! (Feature coming soon)");
+    }
+    private void ToggleElement(PageElement element, bool isChecked)
+    {
+        if (isChecked)
+        {
+            var action = DetermineDefaultAction(element);
+            selectedElements.Add(new SelectedElement
+            {
+                Element = element,
+                ActionType = action,
+                ActionDescription = GenerateActionDescription(element, action),
+                Order = selectedElements.Count + 1,
+                TestValue = GenerateTestValue(element)
+            });
+        }
+        else
+        {
+            selectedElements.RemoveAll(e => e.Element == element);
+            // Reorder remaining elements
+            for (int i = 0; i < selectedElements.Count; i++)
+            {
+                selectedElements[i].Order = i + 1;
+            }
+        }
+    }
+
+    private void SelectAll()
+    {
+        if (analyzedElements == null) return;
+
+        selectedElements.Clear();
+        int order = 1;
+        foreach (var element in analyzedElements)
+        {
+            var action = DetermineDefaultAction(element);
+            selectedElements.Add(new SelectedElement
+            {
+                Element = element,
+                ActionType = action,
+                ActionDescription = GenerateActionDescription(element, action),
+                Order = order++,
+                TestValue = GenerateTestValue(element)
+            });
+        }
+    }
+
+    private void ClearSelection()
+    {
+        selectedElements.Clear();
+        generatedJson = string.Empty;
+    }
+
+    private string DetermineDefaultAction(PageElement element)
+    {
+        return element.Type.ToLower() switch
+        {
+            "button" => "click",
+            "link" => "click",
+            "select" => "selectOption",
+            "checkbox" => "check",
+            "radio" => "click",
+            "input" when element.InputType == "checkbox" => "check",
+            "input" when element.InputType == "radio" => "click",
+            "input" => "fill",
+            "textarea" => "fill",
+            _ => "click"
+        };
+    }
+
+    private string GenerateActionDescription(PageElement element, string action)
+    {
+        var label = element.Label ?? element.Placeholder ?? element.Name ?? element.Id ?? "Element";
+
+        return action switch
+        {
+            "fill" => $"Enter {label}",
+            "click" => $"Click {label}",
+            "selectOption" => $"Select {label}",
+            "check" => $"Check {label}",
+            "uncheck" => $"Uncheck {label}",
+            "assertVisible" => $"Verify {label} is visible",
+            "waitForSelector" => $"Wait for {label}",
+            "hover" => $"Hover over {label}",
+            _ => $"Interact with {label}"
+        };
+    }
+
+    private string GenerateTestValue(PageElement element)
+    {
+        if (element.InputType == null) return "";
+
+        return element.InputType.ToLower() switch
+        {
+            "email" => "test.user@example.com",
+            "password" => "TestP@ssw0rd123",
+            "tel" => "555-123-4567",
+            "number" => "123",
+            "text" => "Test Data",
+            "url" => "https://example.com",
+            "date" => DateTime.Now.ToString("yyyy-MM-dd"),
+            _ => ""
+        };
+    }
+
+    private string GetBestSelector(PageElement element)
+    {
+        // Priority 1: Use data-testid if available
+        if (!string.IsNullOrEmpty(element.Name) && !element.Name.Contains(":"))
+        {
+            return $"[data-testid='{element.Name}'], [name='{element.Name}']";
+        }
+
+        // Priority 2: Use ID only if it's valid (doesn't start with number or contain special chars)
+        if (!string.IsNullOrEmpty(element.Id) && IsValidCssId(element.Id))
+        {
+            return $"#{element.Id}";
+        }
+
+        // Priority 3: Use name attribute
+        if (!string.IsNullOrEmpty(element.Name))
+        {
+            return $"{element.Type}[name='{element.Name}']";
+        }
+
+        // Priority 4: Use placeholder
+        if (!string.IsNullOrEmpty(element.Placeholder))
+        {
+            return $"{element.Type}[placeholder='{element.Placeholder}']";
+        }
+
+        // Priority 5: Use XPath as text (Playwright supports XPath)
+        if (!string.IsNullOrEmpty(element.XPath))
+        {
+            return element.XPath;
+        }
+
+        // Priority 6: Use class name (first class only)
+        if (!string.IsNullOrEmpty(element.ClassName))
+        {
+            var firstClass = element.ClassName.Split(' ')[0];
+            if (!string.IsNullOrEmpty(firstClass))
+            {
+                return $"{element.Type}.{firstClass}";
+            }
+        }
+
+        // Fallback: Use type with text if available
+        if (!string.IsNullOrEmpty(element.Label))
+        {
+            return $"{element.Type}:has-text('{element.Label}')";
+        }
+
+        return element.Type;
+    }
+
+    private bool IsValidCssId(string id)
+    {
+        // CSS IDs cannot start with a digit or contain certain special characters
+        if (string.IsNullOrEmpty(id)) return false;
+        if (char.IsDigit(id[0])) return false;
+        if (id.Contains(":") || id.Contains("[") || id.Contains("]") || id.Contains(" ")) return false;
+        return true;
+    }
+
+    private async Task GeneratePlaywrightJson()
+    {
+        if (!selectedElements.Any()) return;
+
+        var request = new GenerateJsonTestRequest
+        {
+            TestName = testName,
+            Url = pageUrl,
+            SelectedElements = selectedElements.OrderBy(e => e.Order).ToList()
+        };
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/testscripts/generate-json", request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<GenerateJsonTestResponse>();
+                if (result != null)
+                {
+                    generatedJson = result.JsonScript;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            generatedJson = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task CopyJson()
+    {
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", generatedJson);
+        jsonCopied = true;
+        await Task.Delay(2000);
+        jsonCopied = false;
+    }
+
+    private async Task DownloadJson()
+    {
+        var fileName = $"{testName.Replace(" ", "-")}.json";
+        var bytes = System.Text.Encoding.UTF8.GetBytes(generatedJson);
+        var base64 = Convert.ToBase64String(bytes);
+        await JSRuntime.InvokeVoidAsync("downloadFile", fileName, base64);
+    }
     [Parameter]
     public EventCallback<string> OnDescriptionGenerated { get; set; }
 
