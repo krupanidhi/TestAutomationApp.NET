@@ -1,0 +1,549 @@
+@page "/scenario-builder"
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Multi-Page Scenario Builder</PageTitle>
+
+<div style="background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%); padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+    <h2 style="margin-bottom: 0.5rem;">🎬 Multi-Page Test Scenario Builder</h2>
+    <p style="color: #7f8c8d;">Create end-to-end tests that span multiple pages - Login → Navigate → Fill Forms → Submit</p>
+</div>
+
+<!-- Scenario Configuration -->
+<div class="form-group">
+    <label class="form-label">Scenario Name</label>
+    <input @bind="scenarioName" type="text" class="form-input" placeholder="e.g., LoginAndUpdateProfile" />
+</div>
+
+<div class="form-group">
+    <label class="form-label">Description</label>
+    <textarea @bind="scenarioDescription" class="form-textarea" rows="2" 
+              placeholder="Describe what this test scenario does..."></textarea>
+</div>
+
+<!-- URL Sequence Input -->
+<div class="form-group">
+    <label class="form-label">Page URLs (one per line, in sequence)</label>
+    <textarea @bind="urlSequence" class="form-textarea" rows="6" 
+              placeholder="https://example.com/login&#10;https://example.com/profile&#10;https://example.com/confirmation"></textarea>
+    <p style="font-size: 0.875rem; color: #7f8c8d; margin-top: 0.5rem;">
+        💡 Enter URLs in the order they should be visited. Each will be analyzed automatically.
+    </p>
+</div>
+
+<button @onclick="AnalyzeAndGenerate" class="btn btn-primary" style="width: 100%;" disabled="@isProcessing">
+    @(isProcessing ? "🔄 Analyzing & Generating JSON..." : "✨ Analyze Pages & Generate Playwright JSON")
+</button>
+
+<!-- Analysis Progress -->
+@if (isProcessing && analysisProgress.Any())
+{
+    <div style="margin-top: 2rem; background: #f8f9fa; padding: 1rem; border-radius: 8px;">
+        <h4>Analysis Progress</h4>
+        @foreach (var progress in analysisProgress)
+        {
+            <div style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">
+                <span style="color: @(progress.IsComplete ? "#4caf50" : "#666");">
+                    @(progress.IsComplete ? "✓" : "⏳") Step @progress.Order: @progress.PageName
+                </span>
+                @if (progress.IsComplete)
+                {
+                    <span style="color: #4caf50; font-size: 0.875rem;"> - @progress.ElementCount elements found</span>
+                }
+            </div>
+        }
+    </div>
+}
+
+<!-- Element Selection UI -->
+@if (analyzedScenario != null && analyzedScenario.steps != null)
+{
+    <div style="margin-top: 2rem; background: #f8f9fa; padding: 1.5rem; border-radius: 8px;">
+        <h3 style="margin-bottom: 1rem;">📋 Select Elements to Include</h3>
+        <p style="color: #666; margin-bottom: 1rem;">Choose which elements you want in your test scenario. Uncheck elements you don't need.</p>
+        
+        @foreach (var step in analyzedScenario.steps)
+        {
+            <div style="background: white; border: 2px solid #dee2e6; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                <h4 style="margin-bottom: 0.5rem;">Step @step.order: @step.pageName</h4>
+                <p style="font-size: 0.875rem; color: #666; margin-bottom: 1rem;">@step.actualUrl</p>
+                
+                @if (step.actions != null && step.actions.Count > 0)
+                {
+                    <div style="display: grid; gap: 0.75rem;">
+                        @foreach (var action in step.actions)
+                        {
+                            var actionKey = $"{step.order}:{action.order}";
+                            <div style="display: grid; grid-template-columns: auto 1fr auto; gap: 0.75rem; align-items: start; padding: 0.75rem; background: white; border: 1px solid #dee2e6; border-radius: 4px;">
+                                <!-- Checkbox -->
+                                <input type="checkbox" 
+                                       checked="@IsActionSelected(actionKey)"
+                                       @onchange="@((e) => ToggleAction(actionKey, (bool)e.Value!))"
+                                       style="margin-top: 0.25rem;" />
+                                
+                                <!-- Element Info and Value Input -->
+                                <div style="display: flex; flex-direction: column; gap: 0.5rem; text-align: left;">
+                                    <div>
+                                        <strong>@action.element</strong>
+                                        <span style="color: #666; font-size: 0.875rem;"> - @action.action</span>
+                                        @if (action.isNavigation == true)
+                                        {
+                                            <span style="background: #4caf50; color: white; padding: 0.125rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;">Navigation</span>
+                                        }
+                                    </div>
+                                    
+                                    @if (action.action == "type")
+                                    {
+                                        var currentValue = GetActionValue(actionKey);
+                                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                            <label style="font-size: 0.875rem; color: #666; min-width: 80px;">Test Value:</label>
+                                            <input type="text" 
+                                                   value="@currentValue"
+                                                   @onchange="@((ChangeEventArgs e) => { SetActionValue(actionKey, e.Value?.ToString() ?? ""); StateHasChanged(); })"
+                                                   placeholder="Enter test data..."
+                                                   style="flex: 1; padding: 0.375rem 0.75rem; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.875rem;" />
+                                        </div>
+                                    }
+                                    
+                                    <code style="font-size: 0.75rem; color: #999; background: #f8f9fa; padding: 0.25rem 0.5rem; border-radius: 3px; display: inline-block;">@action.selector</code>
+                                </div>
+                                
+                                <!-- Order Badge -->
+                                <div style="background: #e9ecef; color: #495057; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; text-align: center; min-width: 30px;">
+                                    #@action.order
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p style="color: #999; font-style: italic;">No actions found on this page</p>
+                }
+            </div>
+        }
+        
+        <button @onclick="RegenerateJson" class="btn btn-primary" style="width: 100%; margin-top: 1rem;" disabled="@isRegenerating">
+            @(isRegenerating ? "⏳ Regenerating..." : "🔄 Regenerate JSON with Selected Elements")
+        </button>
+        <p style="margin-top: 0.5rem; font-size: 0.875rem; color: #666; text-align: center;">
+            ℹ️ This only rebuilds the JSON from your selections - no re-analysis
+        </p>
+    </div>
+}
+
+<!-- Generated Script -->
+@if (!string.IsNullOrEmpty(generatedScript))
+{
+    <div style="margin-top: 2rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3>Generated Playwright JSON</h3>
+            <button @onclick="CopyScript" class="btn btn-secondary">
+                @(scriptCopied ? "✓ Copied!" : "📋 Copy JSON")
+            </button>
+        </div>
+        <pre class="code-block" style="height: 500px; white-space: pre-wrap; background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; overflow: auto;">@generatedScript</pre>
+        <p style="margin-top: 0.5rem; color: #4caf50; font-size: 0.875rem;">
+            ✓ This JSON can be used directly with your Playwright test executor
+        </p>
+    </div>
+}
+
+<!-- Instructions -->
+<div class="feature-box" style="margin-top: 2rem;">
+    <h3 style="margin-bottom: 1rem;">💡 How to Use</h3>
+    <ul class="feature-list">
+        <li><strong>Enter Scenario Name:</strong> Give your test a meaningful name</li>
+        <li><strong>Add URLs:</strong> Enter page URLs in sequence (one per line)</li>
+        <li><strong>Analyze & Generate:</strong> Click the button to analyze all pages and generate the test</li>
+        <li><strong>Review & Copy:</strong> Review the generated test script and copy it to your project</li>
+        <li><strong>Customize:</strong> Edit the generated script to add specific values for input fields</li>
+    </ul>
+    
+    <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Example URLs:</h4>
+    <pre style="background: #f8f9fa; padding: 1rem; border-radius: 4px; font-size: 0.875rem;">https://hrsa-dcpaas--dcpuat.sandbox.my.site.com/pars/s/login/
+https://ehbsec.hrsa.gov//2010/WebEPSInternal/Interface/Common/AccessControl/ViewUpdateProfile.aspx</pre>
+</div>
+
+@code {
+    private string scenarioName = string.Empty;
+    private string scenarioDescription = string.Empty;
+    private string urlSequence = string.Empty;
+    private bool isProcessing = false;
+    private bool isRegenerating = false;
+    private string generatedScript = string.Empty;
+    private bool scriptCopied = false;
+    private List<AnalysisProgress> analysisProgress = new();
+    private dynamic? analyzedScenario = null;
+    private HashSet<string> selectedActions = new(); // key: "stepOrder:actionOrder"
+    private Dictionary<string, string> actionValues = new(); // key: "stepOrder:actionOrder", value: test data
+
+    private async Task AnalyzeAndGenerate()
+    {
+        if (string.IsNullOrWhiteSpace(scenarioName) || string.IsNullOrWhiteSpace(urlSequence))
+            return;
+
+        isProcessing = true;
+        generatedScript = string.Empty;
+        analysisProgress.Clear();
+
+        try
+        {
+            var urls = urlSequence.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                                  .Select(u => u.Trim())
+                                  .Where(u => !string.IsNullOrEmpty(u))
+                                  .ToList();
+
+            int order = 1;
+            var stepsToAnalyze = new List<PageStep>();
+
+            // Create step objects with URLs for the backend to analyze
+            foreach (var url in urls)
+            {
+                var pageName = ExtractPageNameFromUrl(url);
+                analysisProgress.Add(new AnalysisProgress 
+                { 
+                    Order = order, 
+                    PageName = pageName, 
+                    IsComplete = false 
+                });
+
+                stepsToAnalyze.Add(new PageStep
+                {
+                    Order = order++,
+                    PageName = pageName,
+                    PageUrl = url,
+                    Actions = new List<ElementAction>() // Empty, will be filled by backend
+                });
+            }
+
+            StateHasChanged();
+
+            // Send to backend for analysis and JSON generation
+            var scenarioRequest = new TestScenarioRequest
+            {
+                ScenarioName = scenarioName,
+                Description = scenarioDescription,
+                Steps = stepsToAnalyze
+            };
+
+            // Generate Playwright JSON - backend will analyze each URL
+            var genResponse = await Http.PostAsJsonAsync("api/testscenario/generate-json", scenarioRequest);
+            if (genResponse.IsSuccessStatusCode)
+            {
+                try
+                {
+                    var jsonResult = await genResponse.Content.ReadAsStringAsync();
+                    
+                    Console.WriteLine($"Received JSON response, length: {jsonResult.Length}");
+                    
+                    // Parse and store the scenario using JsonElement instead of dynamic
+                    var jsonDoc = System.Text.Json.JsonDocument.Parse(jsonResult);
+                    var scenarioElement = jsonDoc.RootElement;
+                    
+                    // Convert to a more usable format
+                    analyzedScenario = ParseScenario(scenarioElement);
+                    
+                    // Select all actions by default
+                    selectedActions.Clear();
+                    if (analyzedScenario != null && analyzedScenario.steps != null)
+                    {
+                        foreach (var step in analyzedScenario.steps)
+                        {
+                            if (step.actions != null)
+                            {
+                                foreach (var action in step.actions)
+                                {
+                                    selectedActions.Add($"{step.order}:{action.order}");
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Generate initial JSON
+                    generatedScript = System.Text.Json.JsonSerializer.Serialize(scenarioElement, new System.Text.Json.JsonSerializerOptions
+                    {
+                        WriteIndented = true
+                    });
+
+                    // Update progress
+                    foreach (var prog in analysisProgress)
+                    {
+                        prog.IsComplete = true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    generatedScript = $"Error parsing response: {ex.Message}";
+                }
+                
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            generatedScript = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private string ExtractPageNameFromUrl(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            var path = uri.AbsolutePath.Trim('/');
+            var segments = path.Split('/');
+            var lastSegment = segments.LastOrDefault() ?? "Page";
+            lastSegment = System.IO.Path.GetFileNameWithoutExtension(lastSegment);
+            return string.Join("", lastSegment.Split('-', '_')
+                .Select(s => char.ToUpper(s[0]) + s.Substring(1).ToLower()));
+        }
+        catch
+        {
+            return "Page";
+        }
+    }
+
+    private async Task CopyScript()
+    {
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", generatedScript);
+        scriptCopied = true;
+        await Task.Delay(2000);
+        scriptCopied = false;
+    }
+
+    private bool IsActionSelected(string actionKey)
+    {
+        return selectedActions.Contains(actionKey);
+    }
+
+    private void ToggleAction(string actionKey, bool isSelected)
+    {
+        if (isSelected)
+            selectedActions.Add(actionKey);
+        else
+            selectedActions.Remove(actionKey);
+    }
+
+    private string GetActionValue(string actionKey)
+    {
+        return actionValues.TryGetValue(actionKey, out var value) ? value : "TODO: Add value";
+    }
+
+    private void SetActionValue(string actionKey, string value)
+    {
+        actionValues[actionKey] = value;
+        Console.WriteLine($"Set value for {actionKey}: {value}");
+    }
+
+    private string GetActionValueForBinding(string actionKey)
+    {
+        if (!actionValues.ContainsKey(actionKey))
+        {
+            actionValues[actionKey] = "TODO: Add value";
+        }
+        return actionValues[actionKey];
+    }
+
+    private void SetActionValueForBinding(string actionKey, string value)
+    {
+        actionValues[actionKey] = value;
+        Console.WriteLine($"Binding set value for {actionKey}: {value}");
+    }
+
+    private dynamic ParseScenario(System.Text.Json.JsonElement element)
+    {
+        var steps = new List<dynamic>();
+        
+        if (element.TryGetProperty("steps", out var stepsElement))
+        {
+            foreach (var stepElement in stepsElement.EnumerateArray())
+            {
+                var actions = new List<dynamic>();
+                
+                if (stepElement.TryGetProperty("actions", out var actionsElement))
+                {
+                    foreach (var actionElement in actionsElement.EnumerateArray())
+                    {
+                        actions.Add(new
+                        {
+                            order = actionElement.TryGetProperty("order", out var o) ? o.GetInt32() : 0,
+                            element = actionElement.TryGetProperty("element", out var e) ? e.GetString() : "",
+                            action = actionElement.TryGetProperty("action", out var a) ? a.GetString() : "",
+                            selector = actionElement.TryGetProperty("selector", out var s) ? s.GetString() : "",
+                            isNavigation = actionElement.TryGetProperty("isNavigation", out var n) && n.GetBoolean()
+                        });
+                    }
+                }
+                
+                steps.Add(new
+                {
+                    order = stepElement.TryGetProperty("order", out var ord) ? ord.GetInt32() : 0,
+                    pageName = stepElement.TryGetProperty("pageName", out var pn) ? pn.GetString() : "",
+                    pageUrl = stepElement.TryGetProperty("pageUrl", out var pu) ? pu.GetString() : "",
+                    actualUrl = stepElement.TryGetProperty("actualUrl", out var au) ? au.GetString() : "",
+                    elementsFound = stepElement.TryGetProperty("elementsFound", out var ef) ? ef.GetInt32() : 0,
+                    actions = actions
+                });
+            }
+        }
+        
+        return new
+        {
+            scenarioName = element.TryGetProperty("scenarioName", out var sn) ? sn.GetString() : "",
+            description = element.TryGetProperty("description", out var desc) ? desc.GetString() : "",
+            steps = steps
+        };
+    }
+
+    private void RegenerateJson()
+    {
+        if (analyzedScenario == null)
+        {
+            Console.WriteLine("Cannot regenerate - no analyzed scenario");
+            return;
+        }
+
+        isRegenerating = true;
+        StateHasChanged(); // Force UI update
+        
+        Console.WriteLine($"Regenerating JSON with {actionValues.Count} custom values - NO RE-ANALYSIS");
+        Console.WriteLine($"Selected actions: {selectedActions.Count}");
+
+        // Rebuild the scenario with only selected actions and custom values
+        var filteredSteps = new List<object>();
+        
+        foreach (var step in analyzedScenario.steps)
+        {
+            var filteredActions = new List<object>();
+            
+            if (step.actions != null)
+            {
+                foreach (var action in step.actions)
+                {
+                    var actionKey = $"{step.order}:{action.order}";
+                    if (selectedActions.Contains(actionKey))
+                    {
+                        // Use custom value if provided, otherwise use "TODO: Add value"
+                        var customValue = actionValues.TryGetValue(actionKey, out var val) ? val : "TODO: Add value";
+                        
+                        Console.WriteLine($"Action {actionKey}: Using value '{customValue}'");
+                        
+                        filteredActions.Add(new
+                        {
+                            order = action.order,
+                            element = action.element,
+                            action = action.action,
+                            value = customValue,
+                            selector = action.selector,
+                            delayMs = 0,
+                            isNavigation = action.isNavigation
+                        });
+                    }
+                }
+            }
+            
+            // Only include steps that have selected actions
+            if (filteredActions.Any())
+            {
+                filteredSteps.Add(new
+                {
+                    order = step.order,
+                    pageName = step.pageName,
+                    pageUrl = step.pageUrl,
+                    actualUrl = step.actualUrl,
+                    actions = filteredActions,
+                    elementsFound = step.elementsFound
+                });
+            }
+        }
+
+        var filteredScenario = new
+        {
+            scenarioName = analyzedScenario.scenarioName,
+            description = analyzedScenario.description,
+            steps = filteredSteps
+        };
+
+        generatedScript = System.Text.Json.JsonSerializer.Serialize(filteredScenario, new System.Text.Json.JsonSerializerOptions
+        {
+            WriteIndented = true
+        });
+
+        isRegenerating = false;
+        StateHasChanged(); // Force UI update
+        Console.WriteLine("JSON regeneration complete - instant, no API calls made");
+        Console.WriteLine($"Generated JSON length: {generatedScript.Length}");
+    }
+
+    // Helper Classes
+    public class AnalysisProgress
+    {
+        public int Order { get; set; }
+        public string PageName { get; set; } = string.Empty;
+        public bool IsComplete { get; set; }
+        public int ElementCount { get; set; }
+    }
+
+    public class PageStepData
+    {
+        public int Order { get; set; }
+        public string PageName { get; set; } = string.Empty;
+        public string PageUrl { get; set; } = string.Empty;
+        public List<ElementActionData> Actions { get; set; } = new();
+    }
+
+    public class ElementActionData
+    {
+        public int Order { get; set; }
+        public string ElementLabel { get; set; } = string.Empty;
+        public string ActionType { get; set; } = string.Empty;
+        public string? Value { get; set; }
+        public int DelayAfterMs { get; set; }
+    }
+
+    public class PageElement
+    {
+        public string Type { get; set; } = string.Empty;
+        public string? Label { get; set; }
+        public string? Id { get; set; }
+    }
+
+    public class AnalyzePageResponse
+    {
+        public List<PageElement>? Elements { get; set; }
+    }
+
+    public class TestScenarioRequest
+    {
+        public string ScenarioName { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public List<PageStep> Steps { get; set; } = new();
+    }
+
+    public class PageStep
+    {
+        public int Order { get; set; }
+        public string PageName { get; set; } = string.Empty;
+        public string PageUrl { get; set; } = string.Empty;
+        public List<ElementAction> Actions { get; set; } = new();
+    }
+
+    public class ElementAction
+    {
+        public int Order { get; set; }
+        public string ElementLabel { get; set; } = string.Empty;
+        public string ActionType { get; set; } = string.Empty;
+        public string? Value { get; set; }
+        public int DelayAfterMs { get; set; }
+    }
+
+    public class TestScenarioResponse
+    {
+        public string GeneratedScript { get; set; } = string.Empty;
+    }
+}

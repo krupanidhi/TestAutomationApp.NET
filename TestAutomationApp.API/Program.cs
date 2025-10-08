@@ -18,6 +18,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // Register services
 builder.Services.AddScoped<ITestGeneratorService, TestGeneratorService>();
 builder.Services.AddScoped<IPageAnalyzerService, PageAnalyzerService>();
+builder.Services.AddScoped<ITestScenarioService, TestScenarioService>();
 builder.Services.AddSingleton<BrowserAutomationService>();
 builder.Services.AddScoped<IPlaywrightExecutorService, PlaywrightExecutorService>();
 builder.Services.AddHttpClient();

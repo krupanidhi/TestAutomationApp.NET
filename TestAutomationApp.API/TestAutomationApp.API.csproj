@@ -31,4 +31,10 @@
     <ProjectReference Include="..\TestAutomationApp.Shared\TestAutomationApp.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

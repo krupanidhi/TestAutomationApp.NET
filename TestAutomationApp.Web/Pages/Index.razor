@@ -23,6 +23,9 @@
             <button class="tab @(activeTab == "generator" ? "active" : "")" @onclick="@(() => activeTab = "generator")">
                 🤖 Generate Tests
             </button>
+            <button class="tab @(activeTab == "scenario" ? "active" : "")" @onclick="@(() => activeTab = "scenario")">
+                🎬 Multi-Page Scenario
+            </button>
         </div>
 
         @if (activeTab == "form")
@@ -40,6 +43,10 @@
         else if (activeTab == "generator")
         {
             <TestGenerator @ref="testGenerator" />
+        }
+        else if (activeTab == "scenario")
+        {
+            <ScenarioBuilder />
         }
     </div>
 </div>
