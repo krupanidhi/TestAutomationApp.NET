@@ -219,12 +219,16 @@ Then provide a comprehensive UI description suitable for generating automated te
             ExtractSalesforceElements(doc, elements);
         }
 
-        // Extract input fields
-        var inputs = doc.DocumentNode.SelectNodes("//input");
+        // Extract input fields (excluding button types to avoid duplication)
+        var inputs = doc.DocumentNode.SelectNodes("//input[not(@type='button') and not(@type='submit') and not(@type='reset')]");
         if (inputs != null)
         {
             foreach (var input in inputs)
             {
+                // Skip hidden inputs
+                var inputType = input.GetAttributeValue("type", "text");
+                if (inputType == "hidden") continue;
+
                 var element = new PageElement
                 {
                     Type = "input",
@@ -232,7 +236,7 @@ Then provide a comprehensive UI description suitable for generating automated te
                     Name = input.GetAttributeValue("name", null),
                     ClassName = input.GetAttributeValue("class", null),
                     Placeholder = input.GetAttributeValue("placeholder", null),
-                    InputType = input.GetAttributeValue("type", "text"),
+                    InputType = inputType,
                     IsRequired = input.GetAttributeValue("required", null) != null,
                     Label = FindLabelForInput(doc, input)
                 };
@@ -240,19 +244,32 @@ Then provide a comprehensive UI description suitable for generating automated te
             }
         }
 
-        // Extract buttons
-        var buttons = doc.DocumentNode.SelectNodes("//button");
+        // Extract buttons (including input type=button/submit)
+        var buttons = doc.DocumentNode.SelectNodes("//button | //input[@type='button'] | //input[@type='submit']");
         if (buttons != null)
         {
+            // Track seen button labels to avoid duplicates
+            var seenButtons = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            
             foreach (var button in buttons)
             {
+                var label = button.Name == "button" 
+                    ? button.InnerText?.Trim() 
+                    : button.GetAttributeValue("value", null)?.Trim();
+                
+                // Skip empty labels or duplicates
+                if (string.IsNullOrWhiteSpace(label)) continue;
+                if (seenButtons.Contains(label)) continue;
+                
+                seenButtons.Add(label);
+                
                 elements.Add(new PageElement
                 {
                     Type = "button",
                     Id = button.GetAttributeValue("id", null),
                     Name = button.GetAttributeValue("name", null),
                     ClassName = button.GetAttributeValue("class", null),
-                    Label = button.InnerText?.Trim(),
+                    Label = label,
                     InputType = button.GetAttributeValue("type", "button")
                 });
             }
@@ -299,11 +316,13 @@ Then provide a comprehensive UI description suitable for generating automated te
         var links = doc.DocumentNode.SelectNodes("//a[@href]");
         if (links != null)
         {
+            var seenLinks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var link in links.Take(20)) // Limit to avoid too many links
             {
                 var linkText = link.InnerText?.Trim();
-                if (!string.IsNullOrWhiteSpace(linkText))
+                if (!string.IsNullOrWhiteSpace(linkText) && !seenLinks.Contains(linkText))
                 {
+                    seenLinks.Add(linkText);
                     elements.Add(new PageElement
                     {
                         Type = "link",
@@ -315,7 +334,23 @@ Then provide a comprehensive UI description suitable for generating automated te
             }
         }
 
-        return elements;
+        // Final deduplication step - remove duplicate elements based on type and label
+        var deduplicated = new List<PageElement>();
+        var seen = new HashSet<string>();
+        
+        foreach (var element in elements)
+        {
+            // Create a unique key based on type and label/id
+            var key = $"{element.Type}:{element.Label ?? element.Id ?? element.Name}";
+            
+            if (!seen.Contains(key))
+            {
+                seen.Add(key);
+                deduplicated.Add(element);
+            }
+        }
+
+        return deduplicated;
     }
 
     private string? FindLabelForInput(HtmlDocument doc, HtmlNode input)
