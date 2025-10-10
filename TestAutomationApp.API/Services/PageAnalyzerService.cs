@@ -229,6 +229,9 @@ Then provide a comprehensive UI description suitable for generating automated te
                 var inputType = input.GetAttributeValue("type", "text");
                 if (inputType == "hidden") continue;
 
+                // Skip non-interactive elements
+                if (!IsInteractableInput(input)) continue;
+
                 var element = new PageElement
                 {
                     Type = "input",
@@ -624,5 +627,47 @@ Then provide a comprehensive UI description suitable for generating automated te
         {
             _logger.LogWarning("Salesforce page detected but no elements extracted. Page may use Shadow DOM.");
         }
+    }
+
+    private bool IsInteractableInput(HtmlNode input)
+    {
+        // Skip if disabled or readonly
+        if (input.GetAttributeValue("disabled", null) != null) return false;
+        if (input.GetAttributeValue("readonly", null) != null) return false;
+
+        // Skip if display:none or visibility:hidden
+        var style = input.GetAttributeValue("style", "");
+        if (style.Contains("display:none") || style.Contains("display: none")) return false;
+        if (style.Contains("visibility:hidden") || style.Contains("visibility: hidden")) return false;
+
+        // Skip if has class indicating it's hidden
+        var className = input.GetAttributeValue("class", "");
+        if (className.Contains("hidden") || className.Contains("d-none")) return false;
+
+        // Skip search boxes and filter inputs (usually not part of main form flow)
+        var id = input.GetAttributeValue("id", "");
+        var name = input.GetAttributeValue("name", "");
+        var placeholder = input.GetAttributeValue("placeholder", "");
+        
+        var searchTerms = new[] { "search", "filter", "query", "browse" };
+        foreach (var term in searchTerms)
+        {
+            if (id.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                placeholder.Contains(term, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        // Must have either id, name, or placeholder to be useful
+        if (string.IsNullOrWhiteSpace(id) && 
+            string.IsNullOrWhiteSpace(name) && 
+            string.IsNullOrWhiteSpace(placeholder))
+        {
+            return false;
+        }
+
+        return true;
     }
 }

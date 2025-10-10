@@ -1,0 +1,359 @@
+@page "/test-data"
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Test Data Manager</PageTitle>
+
+<div style="background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%); padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+    <h2 style="margin-bottom: 0.5rem;">🗄️ Test Data Manager</h2>
+    <p style="color: #7f8c8d;">Manage test data sets with secure credential storage</p>
+</div>
+
+<!-- Action Buttons -->
+<div style="display: flex; gap: 1rem; margin-bottom: 2rem;">
+    <button @onclick="ShowCreateForm" class="btn btn-primary">
+        ➕ Create New Test Data Set
+    </button>
+    <button @onclick="LoadTestDataSets" class="btn btn-secondary">
+        🔄 Refresh List
+    </button>
+</div>
+
+<!-- Create/Edit Form -->
+@if (showForm)
+{
+    <div style="background: white; border: 2px solid #667eea; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem;">
+        <h3>@(isEditing ? "Edit" : "Create") Test Data Set</h3>
+        
+        <div class="form-group">
+            <label class="form-label">Name</label>
+            <input @bind="currentDataSet.Name" type="text" class="form-input" placeholder="e.g., Admin User Credentials" />
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea @bind="currentDataSet.Description" class="form-textarea" rows="2" 
+                      placeholder="Describe this test data set..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Environment</label>
+            <select @bind="currentDataSet.Environment" class="form-input">
+                <option value="Dev">Development</option>
+                <option value="QA">QA</option>
+                <option value="Staging">Staging</option>
+                <option value="Prod">Production</option>
+            </select>
+        </div>
+
+        <h4 style="margin-top: 1.5rem; margin-bottom: 1rem;">Data Entries</h4>
+        
+        @foreach (var entry in dataEntries)
+        {
+            <div style="display: grid; grid-template-columns: 2fr 3fr 1fr 1fr auto; gap: 0.5rem; margin-bottom: 0.5rem; align-items: end;">
+                <div>
+                    <label style="font-size: 0.875rem; color: #666;">Key</label>
+                    <input @bind="entry.Key" type="text" class="form-input" placeholder="username" />
+                </div>
+                <div>
+                    <label style="font-size: 0.875rem; color: #666;">Value</label>
+                    <input @bind="entry.Value" type="@(entry.IsSecure ? "password" : "text")" class="form-input" placeholder="Enter value" />
+                </div>
+                <div>
+                    <label style="font-size: 0.875rem; color: #666;">Type</label>
+                    <select @bind="entry.Type" class="form-input">
+                        <option value="text">Text</option>
+                        <option value="password">Password</option>
+                        <option value="email">Email</option>
+                        <option value="number">Number</option>
+                    </select>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem; padding-top: 1.5rem;">
+                    <input type="checkbox" @bind="entry.IsSecure" id="secure-@entry.Key" />
+                    <label for="secure-@entry.Key" style="font-size: 0.875rem; margin: 0;">🔒 Secure</label>
+                </div>
+                <button @onclick="@(() => RemoveEntry(entry))" class="btn btn-danger" style="padding: 0.5rem 0.75rem;">
+                    ❌
+                </button>
+            </div>
+        }
+
+        <button @onclick="AddEntry" class="btn btn-secondary" style="margin-top: 0.5rem;">
+            ➕ Add Entry
+        </button>
+
+        <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+            <button @onclick="SaveTestDataSet" class="btn btn-primary" disabled="@isSaving">
+                @(isSaving ? "💾 Saving..." : "💾 Save")
+            </button>
+            <button @onclick="CancelForm" class="btn btn-secondary">
+                ❌ Cancel
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(formMessage))
+        {
+            <div style="margin-top: 1rem; padding: 0.75rem; background: @(formSuccess ? "#d4edda" : "#f8d7da"); 
+                        color: @(formSuccess ? "#155724" : "#721c24"); border-radius: 4px;">
+                @formMessage
+            </div>
+        }
+    </div>
+}
+
+<!-- Test Data Sets List -->
+<div style="background: white; border-radius: 8px; padding: 1.5rem;">
+    <h3 style="margin-bottom: 1rem;">Saved Test Data Sets (@testDataSets.Count)</h3>
+
+    @if (isLoading)
+    {
+        <p>Loading...</p>
+    }
+    else if (!testDataSets.Any())
+    {
+        <p style="color: #999; font-style: italic;">No test data sets found. Create one to get started!</p>
+    }
+    else
+    {
+        <div style="display: grid; gap: 1rem;">
+            @foreach (var dataSet in testDataSets)
+            {
+                <div style="border: 1px solid #dee2e6; border-radius: 8px; padding: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div style="flex: 1;">
+                            <h4 style="margin-bottom: 0.5rem;">@dataSet.Name</h4>
+                            <p style="color: #666; font-size: 0.875rem; margin-bottom: 0.5rem;">@dataSet.Description</p>
+                            <div style="display: flex; gap: 1rem; font-size: 0.875rem; color: #666;">
+                                <span>🌍 @dataSet.Environment</span>
+                                <span>📊 @dataSet.Data.Count entries</span>
+                                <span>📅 @dataSet.CreatedAt.ToString("yyyy-MM-dd HH:mm")</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button @onclick="@(() => EditTestDataSet(dataSet))" class="btn btn-secondary">
+                                ✏️ Edit
+                            </button>
+                            <button @onclick="@(() => DeleteTestDataSet(dataSet.Id))" class="btn btn-danger">
+                                🗑️ Delete
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Show data entries -->
+                    <details style="margin-top: 1rem;">
+                        <summary style="cursor: pointer; color: #667eea; font-weight: 600;">View Data Entries</summary>
+                        <div style="margin-top: 0.5rem; padding: 0.5rem; background: #f8f9fa; border-radius: 4px;">
+                            @foreach (var entry in dataSet.Data)
+                            {
+                                <div style="display: flex; justify-content: space-between; padding: 0.25rem 0; border-bottom: 1px solid #dee2e6;">
+                                    <span><strong>@entry.Key:</strong></span>
+                                    <span style="font-family: monospace;">
+                                        @(entry.Value.IsSecure ? "********" : entry.Value.Value)
+                                        @if (entry.Value.IsSecure)
+                                        {
+                                            <span style="color: #28a745; margin-left: 0.5rem;">🔒</span>
+                                        }
+                                    </span>
+                                </div>
+                            }
+                        </div>
+                    </details>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<TestDataSet> testDataSets = new();
+    private bool isLoading = false;
+    private bool showForm = false;
+    private bool isEditing = false;
+    private bool isSaving = false;
+    private string formMessage = string.Empty;
+    private bool formSuccess = false;
+
+    private TestDataRequest currentDataSet = new();
+    private List<TestDataEntry> dataEntries = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTestDataSets();
+    }
+
+    private async Task LoadTestDataSets()
+    {
+        isLoading = true;
+        try
+        {
+            var response = await Http.GetFromJsonAsync<TestDataListResponse>("api/testdata");
+            if (response != null)
+            {
+                testDataSets = response.DataSets;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading test data sets: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ShowCreateForm()
+    {
+        isEditing = false;
+        currentDataSet = new TestDataRequest { Environment = "QA" };
+        dataEntries = new List<TestDataEntry>
+        {
+            new TestDataEntry { Key = "username", Type = "text", IsSecure = false },
+            new TestDataEntry { Key = "password", Type = "password", IsSecure = true }
+        };
+        showForm = true;
+        formMessage = string.Empty;
+    }
+
+    private async Task EditTestDataSet(TestDataSet dataSet)
+    {
+        isEditing = true;
+        currentDataSet = new TestDataRequest
+        {
+            Name = dataSet.Name,
+            Description = dataSet.Description,
+            Environment = dataSet.Environment
+        };
+        
+        dataEntries = dataSet.Data.Select(kvp => new TestDataEntry
+        {
+            Key = kvp.Key,
+            Value = kvp.Value.Value,
+            Type = kvp.Value.Type,
+            IsSecure = kvp.Value.IsSecure,
+            Description = kvp.Value.Description
+        }).ToList();
+
+        showForm = true;
+        formMessage = string.Empty;
+    }
+
+    private void AddEntry()
+    {
+        dataEntries.Add(new TestDataEntry { Type = "text", IsSecure = false });
+    }
+
+    private void RemoveEntry(TestDataEntry entry)
+    {
+        dataEntries.Remove(entry);
+    }
+
+    private async Task SaveTestDataSet()
+    {
+        if (string.IsNullOrWhiteSpace(currentDataSet.Name))
+        {
+            formMessage = "Please enter a name for the test data set";
+            formSuccess = false;
+            return;
+        }
+
+        isSaving = true;
+        formMessage = string.Empty;
+
+        try
+        {
+            // Convert entries to dictionary
+            currentDataSet.Data = dataEntries
+                .Where(e => !string.IsNullOrWhiteSpace(e.Key))
+                .ToDictionary(e => e.Key, e => e);
+
+            var response = await Http.PostAsJsonAsync("api/testdata", currentDataSet);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                formMessage = "Test data set saved successfully!";
+                formSuccess = true;
+                await Task.Delay(1500);
+                showForm = false;
+                await LoadTestDataSets();
+            }
+            else
+            {
+                formMessage = $"Error: {response.StatusCode}";
+                formSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            formMessage = $"Error: {ex.Message}";
+            formSuccess = false;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void CancelForm()
+    {
+        showForm = false;
+        formMessage = string.Empty;
+    }
+
+    private async Task DeleteTestDataSet(string id)
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this test data set?"))
+        {
+            return;
+        }
+
+        try
+        {
+            var response = await Http.DeleteAsync($"api/testdata/{id}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadTestDataSets();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting test data set: {ex.Message}");
+        }
+    }
+
+    // Helper classes matching DTOs
+    public class TestDataSet
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string Environment { get; set; } = string.Empty;
+        public Dictionary<string, TestDataEntry> Data { get; set; } = new();
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    public class TestDataEntry
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
+        public string Type { get; set; } = "text";
+        public bool IsSecure { get; set; } = false;
+        public string? Description { get; set; }
+    }
+
+    public class TestDataRequest
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string Environment { get; set; } = "QA";
+        public Dictionary<string, TestDataEntry> Data { get; set; } = new();
+    }
+
+    public class TestDataListResponse
+    {
+        public List<TestDataSet> DataSets { get; set; } = new();
+        public int TotalCount { get; set; }
+    }
+}

@@ -81,20 +81,22 @@
     <div class="section-header">Employee Details</div>
     <div class="form-group">
         <label class="form-label">Organization Type</label>
-        <div class="radio-group">
-            <label class="radio-label">
-                <InputRadio Name="orgType" @bind-Value="account.OrganizationType" id="orgType-hhs" />
-                HHS Employee
-            </label>
-            <label class="radio-label">
-                <InputRadio Name="orgType" @bind-Value="account.OrganizationType" id="orgType-contractor" />
-                Contractor
-            </label>
-            <label class="radio-label">
-                <InputRadio Name="orgType" @bind-Value="account.OrganizationType" id="orgType-other" />
-                Other
-            </label>
-        </div>
+        <InputRadioGroup Name="orgType" @bind-Value="account.OrganizationType">
+            <div class="radio-group">
+                <label class="radio-label">
+                    <InputRadio Value="@("HHS Employee")" id="orgType-hhs" />
+                    HHS Employee
+                </label>
+                <label class="radio-label">
+                    <InputRadio Value="@("Contractor")" id="orgType-contractor" />
+                    Contractor
+                </label>
+                <label class="radio-label">
+                    <InputRadio Value="@("Other")" id="orgType-other" />
+                    Other
+                </label>
+            </div>
+        </InputRadioGroup>
     </div>
 
     <div class="form-group">
@@ -105,34 +107,38 @@
 
     <div class="form-group">
         <label class="form-label">Status</label>
-        <div class="radio-group">
-            <label class="radio-label">
-                <InputRadio Name="status" @bind-Value="account.Status" id="status-temporary" />
-                Temporary
-            </label>
-            <label class="radio-label">
-                <InputRadio Name="status" @bind-Value="account.Status" id="status-permanent" />
-                Permanent
-            </label>
-        </div>
+        <InputRadioGroup Name="status" @bind-Value="account.Status">
+            <div class="radio-group">
+                <label class="radio-label">
+                    <InputRadio Value="@("Temporary")" id="status-temporary" />
+                    Temporary
+                </label>
+                <label class="radio-label">
+                    <InputRadio Value="@("Permanent")" id="status-permanent" />
+                    Permanent
+                </label>
+            </div>
+        </InputRadioGroup>
     </div>
 
     <div class="form-group">
         <label class="form-label">Work Location</label>
-        <div class="radio-group">
-            <label class="radio-label">
-                <InputRadio Name="workLocation" @bind-Value="account.WorkLocation" id="workLocation-withUS" />
-                within US
-            </label>
-            <label class="radio-label">
-                <InputRadio Name="workLocation" @bind-Value="account.WorkLocation" id="workLocation-field" />
-                Field Office
-            </label>
-            <label class="radio-label">
-                <InputRadio Name="workLocation" @bind-Value="account.WorkLocation" id="workLocation-other" />
-                Other
-            </label>
-        </div>
+        <InputRadioGroup Name="workLocation" @bind-Value="account.WorkLocation">
+            <div class="radio-group">
+                <label class="radio-label">
+                    <InputRadio Value="@("within US")" id="workLocation-withUS" />
+                    within US
+                </label>
+                <label class="radio-label">
+                    <InputRadio Value="@("Field Office")" id="workLocation-field" />
+                    Field Office
+                </label>
+                <label class="radio-label">
+                    <InputRadio Value="@("Other")" id="workLocation-other" />
+                    Other
+                </label>
+            </div>
+        </InputRadioGroup>
     </div>
 
     <div class="form-group">

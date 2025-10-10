@@ -26,6 +26,9 @@
             <button class="tab @(activeTab == "scenario" ? "active" : "")" @onclick="@(() => activeTab = "scenario")">
                 🎬 Multi-Page Scenario
             </button>
+            <button class="tab @(activeTab == "testdata" ? "active" : "")" @onclick="@(() => activeTab = "testdata")">
+                🗄️ Test Data
+            </button>
         </div>
 
         @if (activeTab == "form")
@@ -47,6 +50,10 @@
         else if (activeTab == "scenario")
         {
             <ScenarioBuilder />
+        }
+        else if (activeTab == "testdata")
+        {
+            <TestDataManager />
         }
     </div>
 </div>

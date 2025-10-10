@@ -107,66 +107,90 @@ public class TestScenarioService : ITestScenarioService
             {
                 if (!string.IsNullOrEmpty(step.PageUrl))
                 {
-                    _logger.LogInformation("Navigating to page {Order}: {Url}", order, step.PageUrl);
+                    _logger.LogInformation("Processing step {Order}: {PageName} - {Url}", step.Order, step.PageName, step.PageUrl);
                     
                     // Check if this is a login page
                     bool isLoginPage = step.PageUrl.Contains("login", StringComparison.OrdinalIgnoreCase) ||
                                       step.PageUrl.Contains("signin", StringComparison.OrdinalIgnoreCase);
                     
-                    // Navigate to the URL (maintains session)
-                    await page.GotoAsync(step.PageUrl, new Microsoft.Playwright.PageGotoOptions
+                    // Determine the actual target URL
+                    var targetUrl = step.PageUrl;
+                    if (step.PageUrl.Contains("rURL="))
                     {
-                        WaitUntil = Microsoft.Playwright.WaitUntilState.Load,
-                        Timeout = 30000
-                    });
-
-                    // Wait a bit for dynamic content
-                    await page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.DOMContentLoaded);
-                    await Task.Delay(1000);
-
-                    // FIRST: Analyze the page to capture form elements
-                    var pageSteps = await AnalyzePageWithNavigationAsync(page, step.PageName, step.PageUrl, order);
-                    steps.AddRange(pageSteps);
-                    order += pageSteps.Count;
-
-                    // THEN: If this is a login page, perform the actual login for subsequent pages
-                    if (isFirstPage && isLoginPage && !isAuthenticated)
-                    {
-                        _logger.LogInformation("Performing login to access subsequent pages");
-                        try
+                        var rUrlMatch = System.Text.RegularExpressions.Regex.Match(step.PageUrl, @"rURL=([^&]+)");
+                        if (rUrlMatch.Success)
                         {
-                            // Navigate back to login page if we got redirected
-                            if (!page.Url.Contains("login", StringComparison.OrdinalIgnoreCase) && 
-                                !page.Url.Contains("signin", StringComparison.OrdinalIgnoreCase))
-                            {
-                                await page.GotoAsync(step.PageUrl);
-                                await page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.Load);
-                                await Task.Delay(1000);
-                            }
-                            
-                            // Try to login using configured credentials
-                            var usernameField = await page.QuerySelectorAsync("input[type='text'], input[type='email'], input[name*='user'], input[id*='user']");
-                            var passwordField = await page.QuerySelectorAsync("input[type='password']");
-                            var loginButton = await page.QuerySelectorAsync("button[type='submit'], input[type='submit'], button:has-text('Log in'), button:has-text('Login'), button:has-text('Sign in')");
-                            
-                            if (usernameField != null && passwordField != null && loginButton != null)
-                            {
-                                await usernameField.FillAsync("asrilam"); // From config
-                                await passwordField.FillAsync("3ePkpVBMzya4aICkLRyB"); // From config
-                                await loginButton.ClickAsync();
-                                await page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.Load, new Microsoft.Playwright.PageWaitForLoadStateOptions { Timeout = 10000 });
-                                await Task.Delay(2000);
-                                isAuthenticated = true;
-                                _logger.LogInformation("Login successful, current URL: {Url}", page.Url);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Auto-login failed, continuing with analysis");
+                            targetUrl = System.Web.HttpUtility.UrlDecode(rUrlMatch.Groups[1].Value);
+                            _logger.LogInformation("Extracted target URL from redirect: {TargetUrl}", targetUrl);
                         }
                     }
                     
-                    isFirstPage = false;
+                    // Navigate to the page
+                    if (isFirstPage)
+                    {
+                        // First page - always navigate
+                        _logger.LogInformation("Navigating to first page: {Url}", step.PageUrl);
+                        await page.GotoAsync(step.PageUrl, new Microsoft.Playwright.PageGotoOptions
+                        {
+                            WaitUntil = Microsoft.Playwright.WaitUntilState.Load,
+                            Timeout = 30000
+                        });
+                        await page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.DOMContentLoaded);
+                        await Task.Delay(1000);
+                        
+                        // Analyze the login page
+                        var pageSteps = await AnalyzePageWithNavigationAsync(page, step.PageName, step.PageUrl, order);
+                        steps.AddRange(pageSteps);
+                        order += pageSteps.Count;
+                        
+                        // Perform login
+                        if (isLoginPage)
+                        {
+                            _logger.LogInformation("Performing login to access subsequent pages");
+                            try
+                            {
+                                var usernameField = await page.QuerySelectorAsync("input[type='text'], input[type='email'], input[name*='user'], input[id*='user']");
+                                var passwordField = await page.QuerySelectorAsync("input[type='password']");
+                                var loginButton = await page.QuerySelectorAsync("button[type='submit'], input[type='submit'], button:has-text('Log in'), button:has-text('Login'), button:has-text('Sign in')");
+                                
+                                if (usernameField != null && passwordField != null && loginButton != null)
+                                {
+                                    await usernameField.FillAsync("asrilam");
+                                    await passwordField.FillAsync("3ePkpVBMzya4aICkLRyB");
+                                    await loginButton.ClickAsync();
+                                    await page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.Load, new Microsoft.Playwright.PageWaitForLoadStateOptions { Timeout = 10000 });
+                                    await Task.Delay(3000); // Wait for redirect to complete
+                                    isAuthenticated = true;
+                                    _logger.LogInformation("Login successful, current URL: {Url}", page.Url);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Auto-login failed");
+                            }
+                        }
+                        
+                        isFirstPage = false;
+                    }
+                    else if (isAuthenticated)
+                    {
+                        // Subsequent pages - navigate to target URL with authenticated session
+                        _logger.LogInformation("Navigating to authenticated page: {TargetUrl}", targetUrl);
+                        await page.GotoAsync(targetUrl, new Microsoft.Playwright.PageGotoOptions
+                        {
+                            WaitUntil = Microsoft.Playwright.WaitUntilState.Load,
+                            Timeout = 30000
+                        });
+                        await page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.DOMContentLoaded);
+                        await Task.Delay(2000);
+                        
+                        _logger.LogInformation("Analyzing page, current URL: {Url}", page.Url);
+                        
+                        // Analyze the actual page we're on
+                        var pageSteps = await AnalyzePageWithNavigationAsync(page, step.PageName, targetUrl, order);
+                        steps.AddRange(pageSteps);
+                        order += pageSteps.Count;
+                    }
                 }
             }
             
@@ -205,7 +229,11 @@ public class TestScenarioService : ITestScenarioService
     {
         var pageSteps = new List<object>();
         var currentOrder = startOrder;
-        var pageNumber = 1;
+        
+        // Collect ALL actions from all states of this page
+        var allActions = new List<object>();
+        int actionOrder = 1;
+        var allElementsCount = 0;
 
         while (true)
         {
@@ -213,12 +241,12 @@ public class TestScenarioService : ITestScenarioService
             var html = await page.ContentAsync();
             var currentUrl = page.Url;
             
-            _logger.LogInformation("Analyzing page {Order}: {Url}", currentOrder, currentUrl);
+            _logger.LogInformation("Analyzing page state: {Url}", currentUrl);
             var pageAnalysis = await _pageAnalyzer.AnalyzeHtmlAsync(html);
+            allElementsCount += pageAnalysis.Elements.Count;
             
-            // Build actions from analyzed elements
-            var actions = new List<object>();
-            int actionOrder = 1;
+            // Build actions from analyzed elements for this state
+            var stateActions = new List<object>();
             
             // Add actions for inputs (type actions) - filter duplicates
             var seenInputs = new HashSet<string>();
@@ -228,7 +256,7 @@ public class TestScenarioService : ITestScenarioService
                 if (!seenInputs.Contains(key))
                 {
                     seenInputs.Add(key);
-                    actions.Add(new
+                    stateActions.Add(new
                     {
                         order = actionOrder++,
                         element = element.Label ?? element.Id ?? element.Name ?? "Input",
@@ -239,6 +267,12 @@ public class TestScenarioService : ITestScenarioService
                     });
                 }
             }
+            
+            // Log all buttons found
+            var allButtons = pageAnalysis.Elements.Where(e => e.Type == "button").ToList();
+            _logger.LogInformation("Found {Count} buttons on page: {Buttons}", 
+                allButtons.Count, 
+                string.Join(", ", allButtons.Select(b => b.Label ?? b.Id ?? "Unknown")));
             
             // Find navigation buttons (Login, Continue, Next, Submit, Commit, etc.)
             var navigationButtons = pageAnalysis.Elements
@@ -252,6 +286,10 @@ public class TestScenarioService : ITestScenarioService
                         e.Label?.Contains("Commit", StringComparison.OrdinalIgnoreCase) == true ||
                         e.Label?.Contains("Confirm", StringComparison.OrdinalIgnoreCase) == true))
                 .ToList();
+            
+            _logger.LogInformation("Found {Count} navigation buttons: {Buttons}", 
+                navigationButtons.Count, 
+                string.Join(", ", navigationButtons.Select(b => b.Label ?? "Unknown")));
 
             // Check if this is a login button (don't auto-click it during analysis)
             bool isLoginButton = navigationButtons.Any() && 
@@ -264,7 +302,7 @@ public class TestScenarioService : ITestScenarioService
             if (navigationButtons.Any())
             {
                 var navButton = navigationButtons.First();
-                actions.Add(new
+                stateActions.Add(new
                 {
                     order = actionOrder++,
                     element = navButton.Label ?? "Button",
@@ -276,17 +314,9 @@ public class TestScenarioService : ITestScenarioService
                 });
                 hasNavigationButton = true;
             }
-
-            // Add current page to steps
-            pageSteps.Add(new
-            {
-                order = currentOrder++,
-                pageName = pageNumber == 1 ? baseName : $"{baseName}_Step{pageNumber}",
-                pageUrl = pageNumber == 1 ? baseUrl : currentUrl,
-                actualUrl = currentUrl,
-                actions = actions,
-                elementsFound = pageAnalysis.Elements.Count
-            });
+            
+            // Add state actions to the overall action list
+            allActions.AddRange(stateActions);
 
             // If there's a navigation button AND it's NOT a login button, click it and analyze the next page
             // Login buttons should NOT be auto-clicked during analysis (they need credentials first)
@@ -299,20 +329,36 @@ public class TestScenarioService : ITestScenarioService
                     
                     _logger.LogInformation("Clicking navigation button: {Label}", navButton.Label);
                     
-                    // Click and wait for navigation
+                    // Get page content before clicking to detect changes
+                    var htmlBefore = await page.ContentAsync();
                     var currentUrlBefore = page.Url;
+                    
+                    // Click and wait for navigation or page update
                     await page.ClickAsync(selector);
                     await page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.Load, new Microsoft.Playwright.PageWaitForLoadStateOptions { Timeout = 10000 });
-                    await Task.Delay(1000);
+                    await Task.Delay(2000); // Wait for any dynamic updates
                     
-                    // Check if we actually navigated to a different page
-                    if (page.Url == currentUrlBefore)
+                    // Get page content after clicking
+                    var htmlAfter = await page.ContentAsync();
+                    
+                    // Check if page changed (either URL or content)
+                    bool urlChanged = page.Url != currentUrlBefore;
+                    bool contentChanged = htmlAfter != htmlBefore;
+                    
+                    if (!urlChanged && !contentChanged)
                     {
-                        _logger.LogInformation("No navigation occurred, stopping analysis");
+                        _logger.LogInformation("No navigation or page change occurred, stopping analysis");
                         break;
                     }
                     
-                    pageNumber++;
+                    if (urlChanged)
+                    {
+                        _logger.LogInformation("URL changed from {Before} to {After}", currentUrlBefore, page.Url);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Page content changed (same URL) - analyzing next state");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -330,6 +376,17 @@ public class TestScenarioService : ITestScenarioService
                 break;
             }
         }
+        
+        // Create a single step with all actions from all states
+        pageSteps.Add(new
+        {
+            order = currentOrder,
+            pageName = baseName,
+            pageUrl = baseUrl,
+            actualUrl = page.Url,
+            actions = allActions,
+            elementsFound = allElementsCount
+        });
 
         return pageSteps;
     }
