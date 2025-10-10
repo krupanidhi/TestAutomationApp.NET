@@ -155,13 +155,22 @@ public class TestScenarioService : ITestScenarioService
                                 
                                 if (usernameField != null && passwordField != null && loginButton != null)
                                 {
-                                    await usernameField.FillAsync("asrilam");
-                                    await passwordField.FillAsync("3ePkpVBMzya4aICkLRyB");
-                                    await loginButton.ClickAsync();
-                                    await page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.Load, new Microsoft.Playwright.PageWaitForLoadStateOptions { Timeout = 10000 });
-                                    await Task.Delay(3000); // Wait for redirect to complete
-                                    isAuthenticated = true;
-                                    _logger.LogInformation("Login successful, current URL: {Url}", page.Url);
+                                    // Use credentials from request if provided, otherwise skip login
+                                    if (!string.IsNullOrEmpty(request.Username) && !string.IsNullOrEmpty(request.Password))
+                                    {
+                                        _logger.LogInformation("Using provided credentials for login: {Username}", request.Username);
+                                        await usernameField.FillAsync(request.Username);
+                                        await passwordField.FillAsync(request.Password);
+                                        await loginButton.ClickAsync();
+                                        await page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.Load, new Microsoft.Playwright.PageWaitForLoadStateOptions { Timeout = 10000 });
+                                        await Task.Delay(3000); // Wait for redirect to complete
+                                        isAuthenticated = true;
+                                        _logger.LogInformation("Login successful, current URL: {Url}", page.Url);
+                                    }
+                                    else
+                                    {
+                                        _logger.LogWarning("No credentials provided in request - skipping auto-login");
+                                    }
                                 }
                             }
                             catch (Exception ex)
@@ -248,20 +257,60 @@ public class TestScenarioService : ITestScenarioService
             // Build actions from analyzed elements for this state
             var stateActions = new List<object>();
             
-            // Add actions for inputs (type actions) - filter duplicates
+            // Add actions for inputs - filter duplicates
             var seenInputs = new HashSet<string>();
             foreach (var element in pageAnalysis.Elements.Where(e => e.Type == "input"))
             {
+                // Skip inputs with no useful identifiers
+                if (string.IsNullOrEmpty(element.Label) && 
+                    string.IsNullOrEmpty(element.Id) && 
+                    string.IsNullOrEmpty(element.Name) &&
+                    string.IsNullOrEmpty(element.Placeholder))
+                {
+                    continue;
+                }
+                
                 var key = $"{element.Label ?? element.Id ?? element.Name}";
                 if (!seenInputs.Contains(key))
                 {
                     seenInputs.Add(key);
+                    
+                    // Determine action type based on input type
+                    string actionType = "type";
+                    string? actionValue = "TODO: Add value";
+                    string elementLabel = element.Label ?? element.Id ?? element.Name ?? "Input";
+                    
+                    if (element.InputType == "checkbox" || element.InputType == "toggle")
+                    {
+                        actionType = "check";
+                        actionValue = null; // Checkboxes don't need a value
+                        
+                        // Clean up long checkbox labels - extract key phrase
+                        if (elementLabel.Length > 50)
+                        {
+                            // Try to find "I agree" or similar in the label
+                            if (elementLabel.Contains("I agree", StringComparison.OrdinalIgnoreCase))
+                            {
+                                elementLabel = "I Agree";
+                            }
+                            else if (elementLabel.Contains("accept", StringComparison.OrdinalIgnoreCase))
+                            {
+                                elementLabel = "Accept Terms";
+                            }
+                            else
+                            {
+                                // Truncate long labels
+                                elementLabel = elementLabel.Substring(0, Math.Min(50, elementLabel.Length)) + "...";
+                            }
+                        }
+                    }
+                    
                     stateActions.Add(new
                     {
                         order = actionOrder++,
-                        element = element.Label ?? element.Id ?? element.Name ?? "Input",
-                        action = "type",
-                        value = "TODO: Add value",
+                        element = elementLabel,
+                        action = actionType,
+                        value = actionValue,
                         selector = BuildSelector(element),
                         delayMs = 0
                     });
@@ -274,7 +323,7 @@ public class TestScenarioService : ITestScenarioService
                 allButtons.Count, 
                 string.Join(", ", allButtons.Select(b => b.Label ?? b.Id ?? "Unknown")));
             
-            // Find navigation buttons (Login, Continue, Next, Submit, Commit, etc.)
+            // Find navigation buttons (Login, Continue, Next, Submit, Commit, Finish, etc.)
             var navigationButtons = pageAnalysis.Elements
                 .Where(e => e.Type == "button" && 
                        (e.Label?.Contains("Login", StringComparison.OrdinalIgnoreCase) == true ||
@@ -284,7 +333,8 @@ public class TestScenarioService : ITestScenarioService
                         e.Label?.Contains("Next", StringComparison.OrdinalIgnoreCase) == true ||
                         e.Label?.Contains("Submit", StringComparison.OrdinalIgnoreCase) == true ||
                         e.Label?.Contains("Commit", StringComparison.OrdinalIgnoreCase) == true ||
-                        e.Label?.Contains("Confirm", StringComparison.OrdinalIgnoreCase) == true))
+                        e.Label?.Contains("Confirm", StringComparison.OrdinalIgnoreCase) == true ||
+                        e.Label?.Contains("Finish", StringComparison.OrdinalIgnoreCase) == true))
                 .ToList();
             
             _logger.LogInformation("Found {Count} navigation buttons: {Buttons}", 
@@ -336,7 +386,7 @@ public class TestScenarioService : ITestScenarioService
                     // Click and wait for navigation or page update
                     await page.ClickAsync(selector);
                     await page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.Load, new Microsoft.Playwright.PageWaitForLoadStateOptions { Timeout = 10000 });
-                    await Task.Delay(2000); // Wait for any dynamic updates
+                    await Task.Delay(3000); // Wait longer for Salesforce dynamic updates
                     
                     // Get page content after clicking
                     var htmlAfter = await page.ContentAsync();
@@ -393,19 +443,48 @@ public class TestScenarioService : ITestScenarioService
 
     private string BuildSelector(dynamic element)
     {
-        if (!string.IsNullOrEmpty(element.Id))
-            return $"#{element.Id}";
+        string? id = element.Id;
+        string? name = element.Name;
+        string? className = element.ClassName;
         
-        if (!string.IsNullOrEmpty(element.Name))
-            return $"[name='{element.Name}']";
+        // Prefer name attribute as it's most reliable
+        if (!string.IsNullOrEmpty(name))
+            return $"[name='{name}']";
         
-        if (!string.IsNullOrEmpty(element.ClassName))
+        // Use ID only if it's a valid CSS identifier (doesn't start with digit, no special chars)
+        if (!string.IsNullOrEmpty(id) && IsValidCssId(id))
+            return $"#{id}";
+        
+        // If ID exists but invalid, use attribute selector
+        if (!string.IsNullOrEmpty(id))
+            return $"[id='{id}']";
+        
+        if (!string.IsNullOrEmpty(className))
         {
-            var firstClass = element.ClassName.Split(' ').FirstOrDefault();
-            return $".{firstClass}";
+            var classes = className.Split(' ');
+            if (classes.Length > 0 && !string.IsNullOrEmpty(classes[0]))
+            {
+                return $".{classes[0]}";
+            }
+        }
+
+        // Fallback to label if available
+        string? label = element.Label;
+        if (!string.IsNullOrEmpty(label))
+        {
+            return $"text={label}";
         }
 
         return "[data-testid='unknown']";
+    }
+
+    private bool IsValidCssId(string id)
+    {
+        // CSS IDs cannot start with a digit and should not contain colons or other special chars
+        if (string.IsNullOrEmpty(id)) return false;
+        if (char.IsDigit(id[0])) return false;
+        if (id.Contains(':') || id.Contains('[') || id.Contains(']') || id.Contains('.')) return false;
+        return true;
     }
 
     private string DeterminePlaywrightSelector(string elementLabel, string? providedSelector)

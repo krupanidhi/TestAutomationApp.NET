@@ -145,6 +145,33 @@ public class TestExecutorService : ITestExecutorService
                                     }
                                     break;
 
+                                case "check":
+                                case "toggle":
+                                    if (!string.IsNullOrEmpty(action.Selector))
+                                    {
+                                        // Check if already checked
+                                        var isChecked = await page.IsCheckedAsync(action.Selector);
+                                        if (!isChecked)
+                                        {
+                                            // Use force:true for Salesforce Lightning components where label may intercept
+                                            await page.CheckAsync(action.Selector, new PageCheckOptions { Timeout = 5000, Force = true });
+                                        }
+                                        actionResult.Status = "Passed";
+                                    }
+                                    break;
+
+                                case "uncheck":
+                                    if (!string.IsNullOrEmpty(action.Selector))
+                                    {
+                                        var isChecked = await page.IsCheckedAsync(action.Selector);
+                                        if (isChecked)
+                                        {
+                                            await page.UncheckAsync(action.Selector, new PageUncheckOptions { Timeout = 5000 });
+                                        }
+                                        actionResult.Status = "Passed";
+                                    }
+                                    break;
+
                                 case "click":
                                     if (!string.IsNullOrEmpty(action.Selector))
                                     {

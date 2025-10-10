@@ -1,0 +1,24 @@
+{
+  "Id": "4465eb43-848f-4102-b791-32a8113aa8b0",
+  "Name": "DCP",
+  "Description": "",
+  "Environment": "QA",
+  "Data": {
+    "username": {
+      "Key": "username",
+      "Value": "sarokiasamy2@dmigs.com.dcp.dcpuat",
+      "Type": "text",
+      "IsSecure": false,
+      "Description": null
+    },
+    "password": {
+      "Key": "password",
+      "Value": "Grantee@456",
+      "Type": "password",
+      "IsSecure": false,
+      "Description": null
+    }
+  },
+  "CreatedAt": "2025-10-10T19:30:37.457694Z",
+  "UpdatedAt": "2025-10-10T19:30:37.4576947Z"
+}

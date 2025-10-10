@@ -5,6 +5,8 @@ public class TestScenarioRequest
     public string ScenarioName { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public List<PageStep> Steps { get; set; } = new();
+    public string? Username { get; set; } // For login during analysis
+    public string? Password { get; set; } // For login during analysis
 }
 
 public class PageStep

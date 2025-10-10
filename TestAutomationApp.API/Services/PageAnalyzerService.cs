@@ -570,6 +570,23 @@ Then provide a comprehensive UI description suitable for generating automated te
             }
         }
 
+        // Extract Lightning toggles/checkboxes
+        var lightningToggles = doc.DocumentNode.SelectNodes("//lightning-input[@type='checkbox' or @type='toggle']");
+        if (lightningToggles != null)
+        {
+            foreach (var toggle in lightningToggles)
+            {
+                elements.Add(new PageElement
+                {
+                    Type = "input",
+                    InputType = "checkbox",
+                    Label = toggle.GetAttributeValue("label", null),
+                    Name = toggle.GetAttributeValue("name", null),
+                    ClassName = toggle.GetAttributeValue("class", null)
+                });
+            }
+        }
+
         // Extract Lightning buttons
         var lightningButtons = doc.DocumentNode.SelectNodes("//lightning-button");
         if (lightningButtons != null)

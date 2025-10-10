@@ -534,11 +534,18 @@ https://ehbsec.hrsa.gov//2010/WebEPSInternal/Interface/Common/AccessControl/View
             StateHasChanged();
 
             // Send to backend for analysis and JSON generation
+            var username = testDataValues.ContainsKey("username") ? testDataValues["username"] : null;
+            var password = testDataValues.ContainsKey("password") ? testDataValues["password"] : null;
+            
+            Console.WriteLine($"Sending analysis request with credentials: Username={username}, Password={(password != null ? "***" : "null")}");
+            
             var scenarioRequest = new TestScenarioRequest
             {
                 ScenarioName = scenarioName,
                 Description = scenarioDescription,
-                Steps = stepsToAnalyze
+                Steps = stepsToAnalyze,
+                Username = username,
+                Password = password
             };
 
             // Generate Playwright JSON - backend will analyze each URL
@@ -994,34 +1001,5 @@ https://ehbsec.hrsa.gov//2010/WebEPSInternal/Interface/Common/AccessControl/View
         public DateTime StartTime { get; set; }
         public DateTime? EndTime { get; set; }
         public string? ErrorMessage { get; set; }
-    }
-
-    public class TestScenarioRequest
-    {
-        public string ScenarioName { get; set; } = string.Empty;
-        public string Description { get; set; } = string.Empty;
-        public List<PageStep> Steps { get; set; } = new();
-    }
-
-    public class PageStep
-    {
-        public int Order { get; set; }
-        public string PageName { get; set; } = string.Empty;
-        public string PageUrl { get; set; } = string.Empty;
-        public List<ElementAction> Actions { get; set; } = new();
-    }
-
-    public class ElementAction
-    {
-        public int Order { get; set; }
-        public string ElementLabel { get; set; } = string.Empty;
-        public string ActionType { get; set; } = string.Empty;
-        public string? Value { get; set; }
-        public int DelayAfterMs { get; set; }
-    }
-
-    public class TestScenarioResponse
-    {
-        public string GeneratedScript { get; set; } = string.Empty;
     }
 }
