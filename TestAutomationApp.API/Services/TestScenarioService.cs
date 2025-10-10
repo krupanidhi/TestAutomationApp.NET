@@ -1,5 +1,6 @@
 using System.Text;
 using TestAutomationApp.Shared.DTOs;
+using Microsoft.Playwright;
 
 namespace TestAutomationApp.API.Services;
 
@@ -243,9 +244,14 @@ public class TestScenarioService : ITestScenarioService
         var allActions = new List<object>();
         int actionOrder = 1;
         var allElementsCount = 0;
+        int maxIterations = 10; // Prevent infinite loops
+        int currentIteration = 0;
 
-        while (true)
+        while (currentIteration < maxIterations)
         {
+            currentIteration++;
+            _logger.LogInformation("Page analysis iteration {Current}/{Max}", currentIteration, maxIterations);
+            
             // Get current page HTML
             var html = await page.ContentAsync();
             var currentUrl = page.Url;
@@ -324,8 +330,14 @@ public class TestScenarioService : ITestScenarioService
                 string.Join(", ", allButtons.Select(b => b.Label ?? b.Id ?? "Unknown")));
             
             // Find navigation buttons (Login, Continue, Next, Submit, Commit, Finish, etc.)
+            // Exclude "Previous", "Back", "Cancel", "Save" buttons
             var navigationButtons = pageAnalysis.Elements
                 .Where(e => e.Type == "button" && 
+                       !(e.Label?.Contains("Previous", StringComparison.OrdinalIgnoreCase) == true ||
+                         e.Label?.Contains("Back", StringComparison.OrdinalIgnoreCase) == true ||
+                         e.Label?.Contains("Cancel", StringComparison.OrdinalIgnoreCase) == true ||
+                         e.Label?.Contains("Save", StringComparison.OrdinalIgnoreCase) == true ||
+                         e.Label?.Contains("Toggle", StringComparison.OrdinalIgnoreCase) == true) &&
                        (e.Label?.Contains("Login", StringComparison.OrdinalIgnoreCase) == true ||
                         e.Label?.Contains("Log in", StringComparison.OrdinalIgnoreCase) == true ||
                         e.Label?.Contains("Sign in", StringComparison.OrdinalIgnoreCase) == true ||
@@ -334,7 +346,9 @@ public class TestScenarioService : ITestScenarioService
                         e.Label?.Contains("Submit", StringComparison.OrdinalIgnoreCase) == true ||
                         e.Label?.Contains("Commit", StringComparison.OrdinalIgnoreCase) == true ||
                         e.Label?.Contains("Confirm", StringComparison.OrdinalIgnoreCase) == true ||
-                        e.Label?.Contains("Finish", StringComparison.OrdinalIgnoreCase) == true))
+                        e.Label?.Contains("Finish", StringComparison.OrdinalIgnoreCase) == true ||
+                        e.Label?.Contains("Done", StringComparison.OrdinalIgnoreCase) == true ||
+                        e.Label?.Contains("Complete", StringComparison.OrdinalIgnoreCase) == true))
                 .ToList();
             
             _logger.LogInformation("Found {Count} navigation buttons: {Buttons}", 
@@ -374,31 +388,97 @@ public class TestScenarioService : ITestScenarioService
             {
                 try
                 {
+                    // IMPORTANT: Check any checkboxes BEFORE clicking navigation button
+                    // (e.g., "I Agree" checkbox must be checked before "Next" button works)
+                    var checkboxes = pageAnalysis.Elements.Where(e => e.Type == "input" && 
+                        (e.InputType == "checkbox" || e.InputType == "toggle")).ToList();
+                    
+                    if (checkboxes.Any())
+                    {
+                        _logger.LogInformation("Found {Count} checkboxes, checking them before navigation", checkboxes.Count);
+                        foreach (var checkbox in checkboxes)
+                        {
+                            try
+                            {
+                                var cbSelector = BuildSelector(checkbox);
+                                var isChecked = await page.IsCheckedAsync(cbSelector);
+                                if (!isChecked)
+                                {
+                                    _logger.LogInformation("Checking checkbox: {Label}", checkbox.Label ?? "Unknown");
+                                    await page.CheckAsync(cbSelector, new Microsoft.Playwright.PageCheckOptions { Force = true, Timeout = 5000 });
+                                    await Task.Delay(500); // Brief wait after checking
+                                }
+                            }
+                            catch (Exception cbEx)
+                            {
+                                _logger.LogWarning(cbEx, "Failed to check checkbox, continuing anyway");
+                            }
+                        }
+                    }
+                    
                     var navButton = navigationButtons.First();
                     var selector = BuildSelector(navButton);
                     
-                    _logger.LogInformation("Clicking navigation button: {Label}", navButton.Label);
+                    _logger.LogInformation("Clicking navigation button: {Label} with selector: {Selector}", navButton.Label, selector);
                     
-                    // Get page content before clicking to detect changes
-                    var htmlBefore = await page.ContentAsync();
+                    // Get button count before clicking to detect changes
+                    var buttonsBefore = await page.Locator("button").CountAsync();
                     var currentUrlBefore = page.Url;
                     
-                    // Click and wait for navigation or page update
-                    await page.ClickAsync(selector);
-                    await page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.Load, new Microsoft.Playwright.PageWaitForLoadStateOptions { Timeout = 10000 });
-                    await Task.Delay(3000); // Wait longer for Salesforce dynamic updates
-                    
-                    // Get page content after clicking
-                    var htmlAfter = await page.ContentAsync();
-                    
-                    // Check if page changed (either URL or content)
-                    bool urlChanged = page.Url != currentUrlBefore;
-                    bool contentChanged = htmlAfter != htmlBefore;
-                    
-                    if (!urlChanged && !contentChanged)
+                    try
                     {
-                        _logger.LogInformation("No navigation or page change occurred, stopping analysis");
-                        break;
+                        // Click and wait for navigation or page update
+                        await page.ClickAsync(selector, new Microsoft.Playwright.PageClickOptions { Timeout = 10000 });
+                        _logger.LogInformation("Click executed successfully, waiting for page update...");
+                        
+                        // Wait for network to be idle
+                        await page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle, new Microsoft.Playwright.PageWaitForLoadStateOptions { Timeout = 15000 });
+                        
+                        // For Salesforce, wait for the clicked button to become stale (disappear)
+                        // This indicates the page has updated
+                        try
+                        {
+                            await page.WaitForSelectorAsync(selector, new PageWaitForSelectorOptions 
+                            { 
+                                State = WaitForSelectorState.Detached,
+                                Timeout = 5000 
+                            });
+                            _logger.LogInformation("Navigation button disappeared, page has updated");
+                        }
+                        catch
+                        {
+                            _logger.LogInformation("Navigation button still present, waiting for content change...");
+                        }
+                        
+                        await Task.Delay(3000); // Additional wait for dynamic content
+                        
+                        _logger.LogInformation("Wait completed, checking for changes...");
+                    }
+                    catch (Exception clickEx)
+                    {
+                        _logger.LogWarning(clickEx, "Error during click or wait, but continuing...");
+                        await Task.Delay(5000); // Wait anyway in case page is updating
+                    }
+                    
+                    // Get button count after clicking
+                    var buttonsAfter = await page.Locator("button").CountAsync();
+                    
+                    // Also check if the clicked button is still there
+                    bool navButtonStillPresent = await page.Locator(selector).CountAsync() > 0;
+                    
+                    // Check if page changed (URL, button count changed, or nav button disappeared)
+                    bool urlChanged = page.Url != currentUrlBefore;
+                    bool buttonsChanged = buttonsAfter != buttonsBefore;
+                    bool navButtonGone = !navButtonStillPresent;
+                    
+                    _logger.LogInformation("Change detection: URL changed={UrlChanged}, Buttons before={Before}, Buttons after={After}, NavButton gone={NavGone}", 
+                        urlChanged, buttonsBefore, buttonsAfter, navButtonGone);
+                    
+                    // If nothing changed, assume we need to continue anyway (Salesforce might update without obvious changes)
+                    if (!urlChanged && !buttonsChanged && !navButtonGone)
+                    {
+                        _logger.LogInformation("No obvious changes detected, but continuing analysis anyway for Salesforce pages");
+                        // Don't break - continue analyzing
                     }
                     
                     if (urlChanged)
@@ -407,7 +487,7 @@ public class TestScenarioService : ITestScenarioService
                     }
                     else
                     {
-                        _logger.LogInformation("Page content changed (same URL) - analyzing next state");
+                        _logger.LogInformation("Page content changed (same URL) - button count changed from {Before} to {After}", buttonsBefore, buttonsAfter);
                     }
                 }
                 catch (Exception ex)
